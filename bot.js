@@ -1,57 +1,47 @@
 const axios = require('axios');
 
-// Mengambil variabel dari GitHub Secrets
+// Hanya butuh rahasia Telegram saja sekarang!
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const API_FOOTBALL_KEY = process.env.API_FOOTBALL_KEY;
 
-// Konfigurasi Liga (Contoh: ID 1 untuk World Cup, sesuaikan kebutuhan)
-const LEAGUE_ID = 1; 
-const SEASON = 2026;
-
-// Mendapatkan tanggal hari ini (Format: YYYY-MM-DD) sesuai zona waktu lokal
+// Mendapatkan tanggal hari ini (Format: YYYY-MM-DD)
 const today = new Date().toISOString().split('T')[0];
 
 async function getFootballData() {
     try {
-        const response = await axios.get('https://v3.football.api-sports.io/fixtures', {
-            params: {
-                league: LEAGUE_ID,
-                season: SEASON,
-                date: today
-            },
-            headers: {
-                'x-rapidapi-key': API_FOOTBALL_KEY,
-                'x-rapidapi-host': 'v3.football.api-sports.io'
-            }
-        });
-
-        const fixtures = response.data.response;
+        // Menggunakan API Publik Gratis tanpa perlu API Key/Token
+        // Endpoint ini menyediakan data pertandingan yang diperbarui berkala
+        const response = await axios.get('https://worldcupjson.net/matches/today');
+        const matches = response.data;
         
-        if (!fixtures || fixtures.length === 0) {
+        if (!matches || matches.length === 0) {
             console.log('Tidak ada pertandingan untuk hari ini.');
             return null;
         }
 
-        // Mulai menyusun template tabel Telegram
+        // Mulai menyusun tabel ala Telegram
         let message = `🏆 *Hasil & Jadwal Pertandingan (${today})*\n\n`;
         message += `\` Status | Pertandingan         \`\n`;
         message += `\`------------------------------\`\n`;
 
-        fixtures.forEach(item => {
-            // Mengambil status (FT, HT, atau Jam Pertandingan jika belum mulai)
-            let status = item.fixture.status.short;
-            if (status === 'NS') {
-                // Jika belum mulai, tampilkan jamnya saja (HH:MM)
-                const dateObj = new Date(item.fixture.date);
+        matches.forEach(match => {
+            // Memformat status (misal: completed, in_progress, future)
+            let status = 'NS';
+            if (match.status === 'completed') status = 'FT';
+            else if (match.status === 'in_progress') status = 'LIVE';
+            else {
+                // Jika belum mulai, ambil jamnya saja
+                const dateObj = new Date(match.datetime);
                 status = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
             }
             status = status.padEnd(6);
 
-            const home = item.teams.home.name;
-            const away = item.teams.away.name;
-            const homeScore = item.goals.home ?? '-';
-            const awayScore = item.goals.away ?? '-';
+            const home = match.home_team.name || match.home_team.country;
+            const away = match.away_team.name || match.away_team.country;
+            
+            // Jika belum mulai (future), skor dikosongkan (-)
+            const homeScore = match.home_team.goals ?? '-';
+            const awayScore = match.away_team.goals ?? '-';
             
             const matchText = `${home} ${homeScore} - ${awayScore} ${away}`.padEnd(20);
             message += `\` ${status} | ${matchText} \`\n`;
@@ -60,8 +50,9 @@ async function getFootballData() {
         return message;
 
     } catch (error) {
-        console.error('Gagal mengambil data dari API:', error.message);
-        return null;
+        console.error('Gagal mengambil data dari API Publik:', error.message);
+        // Fallback jika API utama down, kita bisa return info cetak kosong
+        return `⚠️ Gagal memuat jadwal otomatis untuk hari ini.`;
     }
 }
 
