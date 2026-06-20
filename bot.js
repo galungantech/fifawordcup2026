@@ -1,5 +1,4 @@
 const axios = require("axios");
-const { renderHTMLTable } = require("./renderEngine");
 
 // ==========================
 // CONFIG
@@ -13,7 +12,7 @@ const headers = {
 };
 
 // ==========================
-// FETCH SAFE
+// SAFE FETCH
 // ==========================
 async function get(url, label) {
     try {
@@ -26,57 +25,48 @@ async function get(url, label) {
 }
 
 // ==========================
-// MATCH TABLE
+// BUILD HTML TABLE BLOCK
+// ==========================
+function buildTable(headers, rows) {
+    let table = `<table border="1">`;
+
+    table += `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
+
+    rows.forEach(r => {
+        table += `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`;
+    });
+
+    table += `</table>`;
+    return table;
+}
+
+// ==========================
+// FORMAT MATCHES
 // ==========================
 function formatMatches(matches) {
-    const rows = (matches || []).slice(0, 8).map(m => {
+    const rows = (matches || []).slice(0, 6).map(m => {
         let status = m.status;
 
         if (status === "FINISHED") status = "FT";
         if (status === "IN_PLAY") status = "LIVE";
 
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
-
         const match = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
+        const group = (m.group || "-").replace("GROUP_", "");
 
-        let group = m.group || "-";
-        group = group.replace("GROUP_", "");
+        return [status, match, group];
+    });
 
-        return `<tr><td>${status}</td><td>${match}</td><td>${group}</td></tr>`;
-    }).join("\n");
-
-    return renderHTMLTable(`
-<tr><th>Status</th><th>Match</th><th>Grp</th></tr>
-${rows}
-`);
+    return buildTable(
+        ["Status", "Match", "Grp"],
+        rows
+    );
 }
 
 // ==========================
-// SCHEDULE TABLE
+// FORMAT SCHEDULE
 // ==========================
 function formatSchedule(matches) {
-    const rows = (matches || []).slice(0, 8).map(m => {
-        const time = new Date(m.utcDate).toLocaleTimeString("id-ID", {
-            timeZone: "Asia/Jakarta",
-            hour: "2-digit",
-            minute: "2-digit"
-        });
-
-        const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
-
-        return `<tr><td>${time}</td><td>${match}</td></tr>`;
-    }).join("\n");
-
-    return renderHTMLTable(`
-<tr><th>WIB</th><th>Match</th></tr>
-${rows}
-`);
-}
-
-// ==========================
-// UCL TABLE (SEPARATE SECTION)
-// ==========================
-function formatUCL(matches) {
     const rows = (matches || []).slice(0, 6).map(m => {
         const time = new Date(m.utcDate).toLocaleTimeString("id-ID", {
             timeZone: "Asia/Jakarta",
@@ -86,83 +76,125 @@ function formatUCL(matches) {
 
         const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
 
-        return `<tr><td>${time}</td><td>${match}</td></tr>`;
-    }).join("\n");
+        return [time, match, m.group || "-"];
+    });
 
-    return renderHTMLTable(`
-<tr><th>UCL TIME</th><th>MATCH</th></tr>
-${rows}
-`);
+    return buildTable(
+        ["Waktu", "Match", "Grp"],
+        rows
+    );
 }
 
 // ==========================
-// BUILD FULL DASHBOARD
+// STATIC DATA (SEPERTI BASH KAMU)
+// ==========================
+function getStaticData() {
+    return {
+        topSkor: buildTable(
+            ["Gol", "Pemain", "Negara"],
+            [
+                ["3", "🐐 Lionel Messi", "🇦🇷 ARG"],
+                ["3", "Jonathan David", "🇨🇦 CAN"],
+                ["2", "Folarin Balogun", "🇺🇸 USA"]
+            ]
+        ),
+
+        klasemenA: buildTable(
+            ["Tim", "M", "Poin"],
+            [
+                ["🇲🇽 Meksiko", "2", "6"],
+                ["🇰🇷 Korea Selatan", "2", "3"]
+            ]
+        ),
+
+        fakta: `
+<ul>
+<li>📌 Format baru: <b>48 tim</b></li>
+<li>🏟 Digelar di 3 negara</li>
+<li>⚡ Gol tercepat: 71 detik</li>
+</ul>`
+    };
+}
+
+// ==========================
+// BUILD DASHBOARD HTML
 // ==========================
 async function buildDashboard() {
 
-    let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
-
-    // ======================
-    // MATCHES
-    // ======================
     const matches = await get(
         "https://api.football-data.org/v4/matches",
         "matches"
     );
 
-    msg += "📌 MATCH RESULTS\n";
-    msg += formatMatches(matches?.matches || []);
-
-    // ======================
-    // SCHEDULE
-    // ======================
-    msg += "\n📅 UPCOMING MATCHES\n";
-    msg += formatSchedule(matches?.matches || []);
-
-    // ======================
-    // UCL
-    // ======================
     const ucl = await get(
         "https://api.football-data.org/v4/competitions/CL/matches",
         "ucl"
     );
 
-    msg += "\n🏆 CHAMPIONS LEAGUE\n";
-    msg += formatUCL(ucl?.matches || []);
+    const staticData = getStaticData();
 
-    // ======================
-    // LIMIT SAFETY
-    // ======================
-    if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(cut)";
-    }
+    const html = `
+<h2>⚽ Piala Dunia FIFA 2026</h2>
+<h3>🗓 ${new Date().toLocaleDateString("id-ID")}</h3>
 
-    return msg;
+<hr>
+
+<h3>🏆 Hasil Pertandingan Hari Ini</h3>
+${formatMatches(matches?.matches || [])}
+
+<br>
+
+<h3>📅 Jadwal Besok</h3>
+${formatSchedule(matches?.matches || [])}
+
+<br>
+
+<h3>🏆 Champions League</h3>
+${formatSchedule(ucl?.matches || [])}
+
+<br>
+
+<h3>🥇 Top Skor</h3>
+${staticData.topSkor}
+
+<br>
+
+<h3>📊 Klasemen Grup A</h3>
+${staticData.klasemenA}
+
+<br>
+
+<h3>🎯 Fakta Menarik</h3>
+${staticData.fakta}
+`;
+
+    return html;
 }
 
 // ==========================
-// SEND TELEGRAM
+// SEND TELEGRAM (HTML MODE)
 // ==========================
-async function sendTelegram(text) {
-    await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-        {
-            chat_id: TELEGRAM_CHAT_ID,
-            text,
-            parse_mode: "MarkdownV2"
-        }
-    );
+async function sendTelegram(html) {
+    try {
+        await axios.post(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+            {
+                chat_id: TELEGRAM_CHAT_ID,
+                text: html,
+                parse_mode: "HTML"
+            }
+        );
+
+        console.log("✅ DASHBOARD SENT");
+    } catch (e) {
+        console.log("❌ ERROR:", e.response?.data || e.message);
+    }
 }
 
 // ==========================
 // RUN
 // ==========================
 (async () => {
-    try {
-        const dashboard = await buildDashboard();
-        await sendTelegram(dashboard);
-        console.log("✅ FULL DASHBOARD SENT");
-    } catch (e) {
-        console.log("❌ ERROR:", e.message);
-    }
+    const dashboard = await buildDashboard();
+    await sendTelegram(dashboard);
 })();
