@@ -102,16 +102,38 @@ function formatSchedule(matches) {
 // LIVE BUTTONS
 // ==========================
 function buildLiveButtons(matches) {
-    const live = (matches || []).filter(m => m.status === "IN_PLAY");
 
-    if (!live.length) return [];
+    const live = (matches || [])
+        .filter(m =>
+            ["IN_PLAY", "LIVE", "PAUSED"].includes(m.status)
+        )
+        .slice(0, 4); // sisakan ruang iklan
 
-    return live.slice(0, 5).map(m => ([
+    const buttons = [];
+
+    // ==========================
+    // LIVE MATCH BUTTONS
+    // ==========================
+    if (live.length > 0) {
+        live.forEach(m => {
+            buttons.push([{
+                text: `🔴 LIVE: ${m.homeTeam?.name} vs ${m.awayTeam?.name}`,
+                url: "https://t.me/KotakBiasa?livestream"
+            }]);
+        });
+    }
+
+    // ==========================
+    // SLOT IKLAN / STREAMING (SELALU ADA)
+    // ==========================
+    buttons.push([
         {
-            text: `🔴 LIVE: ${m.homeTeam?.name} vs ${m.awayTeam?.name}`,
+            text: "📺 Tonton Live Streaming",
             url: "https://t.me/KotakBiasa?livestream"
         }
-    ]));
+    ]);
+
+    return buttons;
 }
 
 // ==========================
