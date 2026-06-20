@@ -29,6 +29,7 @@ function formatTime(utcDate) {
     });
 }
 
+// ✅ Regex HARUS satu baris penuh, tidak boleh dipotong
 function escapeMarkdownV2(text) {
     return text.replace(/([_\*
 
