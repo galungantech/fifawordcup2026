@@ -43,13 +43,12 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// TABLE MATCH RESULT (Hanya Mengubah Tampilan Baris Garis)
+// TABLE MATCH RESULT (Hanya Mengubah Bagian Ini)
 // ==========================================
 function formatMatchTable(matches) {
     let out =
-`┌──────────┬──────────────────────────────┬──────┐
-│  STATUS  │         PERTANDINGAN         │ GRUP │
-├──────────┼──────────────────────────────┼──────┤
+` STATUS | PERTANDINGAN                  | GRUP 
+--------|-------------------------------|------
 `;
 
     (matches || []).slice(0, 8).forEach(m => {
@@ -57,34 +56,31 @@ function formatMatchTable(matches) {
         if (statusText === "FINISHED") statusText = "✅ FT";
         if (statusText === "IN_PLAY") statusText = "🔴 LIVE";
         
-        const status = pad(statusText, 8);
-
+        const status = pad(statusText, 7);
         const home = m.homeTeam?.name || "-";
         const away = m.awayTeam?.name || "-";
-
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
 
-        const match = pad(`${home} ${score} ${away}`, 28);
+        const match = pad(`${home} ${score} ${away}`, 29);
         
         let groupText = m.group || "-";
         if (groupText.includes("GROUP_")) groupText = groupText.replace("GROUP_", "");
         const group = pad(groupText, 4);
 
-        out += `│ ${status} │ ${match} │ ${group} │\n`;
+        out += `${status} | ${match} | ${group}\n`;
     });
 
-    out += `└──────────┴──────────────────────────────┴──────┘`;
-    return `<pre>${out}</pre>`;
+    // Menggunakan pembungkus 'table' agar Telegram merendernya sebagai tabel fisik kotak-kotak
+    return `\`\`\`table\n${out}\`\`\``;
 }
 
 // ==========================================
-// TABLE SCHEDULE (Hanya Mengubah Tampilan Baris Garis)
+// TABLE SCHEDULE (Hanya Mengubah Bagian Ini)
 // ==========================================
 function formatScheduleTable(matches) {
     let out =
-`┌──────────────┬─────────────────────────────────────────┐
-│ WAKTU (WIB)  │              PERTANDINGAN               │
-├──────────────┼─────────────────────────────────────────┤`;
+` WAKTU (WIB) | PERTANDINGAN
+--------------|-----------------------------------------`;
 
     (matches || []).slice(0, 8).forEach(m => {
         const time = formatTime(m.utcDate);
@@ -93,11 +89,11 @@ function formatScheduleTable(matches) {
 
         const match = pad(`${home} vs ${away}`, 39);
 
-        out += `\n│ ${pad(time, 12)} │ ${match} │`;
+        out += `\n ${pad(time, 12)} | ${match}`;
     });
 
-    out += `\n└──────────────┴─────────────────────────────────────────┘`;
-    return `<pre>${out}</pre>`;
+    // Menggunakan pembungkus 'table' agar Telegram merendernya sebagai tabel fisik kotak-kotak
+    return `\`\`\`table\n${out}\`\`\``;
 }
 
 // ==========================================
@@ -143,7 +139,7 @@ async function buildDashboard() {
 }
 
 // ==========================================
-// SEND TELEGRAM (HTML MODE)
+// SEND TELEGRAM (Diubah ke MarkdownV2 agar fitur tabel aktif)
 // ==========================================
 async function sendTelegram(text) {
     try {
@@ -152,7 +148,7 @@ async function sendTelegram(text) {
             {
                 chat_id: TELEGRAM_CHAT_ID,
                 text,
-                parse_mode: "HTML"
+                parse_mode: "MarkdownV2" // Wajib MarkdownV2 agar sintaks ```table dirender native
             }
         );
 
