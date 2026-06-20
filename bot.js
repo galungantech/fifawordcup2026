@@ -14,11 +14,10 @@ const headers = {
 };
 
 // ==========================================
-// UTIL (TABLE FORMAT - Lebar diperluas agar tidak terpotong)
+// UTIL (TABLE FORMAT)
 // ==========================================
 function pad(text, size) {
     text = String(text ?? "-");
-    // Jika teks kepanjangan, kita potong lebih panjang agar tidak menjadi "FINIS..."
     return text.length > size ? text.slice(0, size - 1) + "…" : text + " ".repeat(size - text.length);
 }
 
@@ -44,16 +43,16 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// TABLE MATCH RESULT (Hanya merapikan spasi kolom monospace)
+// TABLE MATCH RESULT (Hanya Mengubah Tampilan Baris Garis)
 // ==========================================
 function formatMatchTable(matches) {
     let out =
-`📊 STATUS | PERTANDINGAN                  | GRUP
---------------------------------------------------
+`┌──────────┬──────────────────────────────┬──────┐
+│  STATUS  │         PERTANDINGAN         │ GRUP │
+├──────────┼──────────────────────────────┼──────┤
 `;
 
     (matches || []).slice(0, 8).forEach(m => {
-        // Mengubah FINISHED menjadi FT agar hemat ruang dan pas di layar HP
         let statusText = m.status || "FT";
         if (statusText === "FINISHED") statusText = "✅ FT";
         if (statusText === "IN_PLAY") statusText = "🔴 LIVE";
@@ -65,35 +64,39 @@ function formatMatchTable(matches) {
 
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
 
-        const match = pad(`${home} ${score} ${away}`, 30);
+        const match = pad(`${home} ${score} ${away}`, 28);
         
-        // Membersihkan tulisan GROUP_ agar ringkas
         let groupText = m.group || "-";
         if (groupText.includes("GROUP_")) groupText = groupText.replace("GROUP_", "");
         const group = pad(groupText, 4);
 
-        out += `${status} | ${match} | ${group}\n`;
+        out += `│ ${status} │ ${match} │ ${group} │\n`;
     });
 
+    out += `└──────────┴──────────────────────────────┴──────┘`;
     return `<pre>${out}</pre>`;
 }
 
 // ==========================================
-// TABLE SCHEDULE (Hanya merapikan spasi kolom monospace)
+// TABLE SCHEDULE (Hanya Mengubah Tampilan Baris Garis)
 // ==========================================
 function formatScheduleTable(matches) {
     let out =
-`⏰ WAKTU (WIB) | PERTANDINGAN
---------------------------------------------`;
+`┌──────────────┬─────────────────────────────────────────┐
+│ WAKTU (WIB)  │              PERTANDINGAN               │
+├──────────────┼─────────────────────────────────────────┤`;
 
     (matches || []).slice(0, 8).forEach(m => {
         const time = formatTime(m.utcDate);
         const home = m.homeTeam?.name || "-";
         const away = m.awayTeam?.name || "-";
 
-        out += `\n${pad(time, 12)} | ${home} vs ${away}`;
+        const match = pad(`${home} vs ${away}`, 39);
+
+        out += `\n│ ${pad(time, 12)} │ ${match} │`;
     });
 
+    out += `\n└──────────────┴─────────────────────────────────────────┘`;
     return `<pre>${out}</pre>`;
 }
 
