@@ -43,10 +43,10 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// TABLE MATCH RESULT (Format HTML Baris TR TD Murni)
+// TABLE MATCH RESULT (Menggunakan format tabel HTML murni)
 // ==========================================
 function formatMatchTable(matches) {
-    let out = "";
+    let rows = "";
 
     (matches || []).slice(0, 8).forEach(m => {
         let statusText = m.status || "FT";
@@ -65,33 +65,33 @@ function formatMatchTable(matches) {
         let groupText = m.group || "-";
         if (groupText.includes("GROUP_")) groupText = groupText.replace("GROUP_", "");
 
-        // Menghasilkan baris HTML murni yang akan disisipkan ke komponen Rich Message milikmu
-        out += `<tr><td>${statusText}</td><td>${home} ${scoreText} ${away}</td><td>${groupText}</td></tr>\n`;
+        rows += `<tr><td>${statusText}</td><td>${home} ${scoreText} ${away}</td><td>${groupText}</td></tr>\n`;
     });
 
-    return out.trim();
+    // Mengembalikan bungkus tabel utuh agar lolos validasi HTML Telegram
+    return `<table>\n<tr><th>Status</th><th>Pertandingan</th><th>Grup</th></tr>\n${rows}</table>`;
 }
 
 // ==========================================
-// TABLE SCHEDULE (Format HTML Baris TR TD Murni)
+// TABLE SCHEDULE (Menggunakan format tabel HTML murni)
 // ==========================================
 function formatScheduleTable(matches) {
-    let out = "";
+    let rows = "";
 
     (matches || []).slice(0, 8).forEach(m => {
         const time = formatTime(m.utcDate);
         const home = m.homeTeam?.name || "-";
         const away = m.awayTeam?.name || "-";
 
-        // Menghasilkan baris HTML murni yang akan disisipkan ke komponen Rich Message milikmu
-        out += `<tr><td>${time}</td><td>${home} vs ${away}</td></tr>\n`;
+        rows += `<tr><td>${time}</td><td>${home} vs ${away}</td></tr>\n`;
     });
 
-    return out.trim();
+    // Mengembalikan bungkus tabel utuh agar lolos validasi HTML Telegram
+    return `<table>\n<tr><th>Waktu (WIB)</th><th>Pertandingan</th></tr>\n${rows}</table>`;
 }
 
 // ==========================================
-// DASHBOARD BUILDER (Tetap Utuh Menyusun String)
+// DASHBOARD BUILDER (Tetap Utuh Seperti Aslinya)
 // ==========================================
 async function buildDashboard() {
 
@@ -133,25 +133,20 @@ async function buildDashboard() {
 }
 
 // ==========================================
-// SEND TELEGRAM (Menggunakan Rich Message Payload)
+// SEND TELEGRAM (Diperbaiki Properti "text" Agar Tidak Kosong)
 // ==========================================
 async function sendTelegram(htmlContent) {
     try {
-        // Karena sistemmu mendukung format rich_message, kita bungkus strukturnya sesuai payload suksesmu
-        const payload = {
-            chat_id: TELEGRAM_CHAT_ID,
-            rich_message: {
-                html: htmlContent
-            }
-        };
-
-        // Ganti endpoint ke editMessageText jika bot ini tujuannya mengupdate pesan lama via ID
         await axios.post(
             `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-            payload
+            {
+                chat_id: TELEGRAM_CHAT_ID,
+                text: htmlContent, // Menggunakan properti "text" standar Telegram API
+                parse_mode: "HTML"
+            }
         );
 
-        console.log("✅ Rich Table Telegram sent");
+        console.log("✅ Telegram HTML Table Berhasil Dikirim!");
     } catch (err) {
         console.error("❌ Telegram error:", err.response?.data || err.message);
     }
