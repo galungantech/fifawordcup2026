@@ -4,20 +4,32 @@ const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// =====================================
-// API BASE
-// =====================================
+if (!RAPIDAPI_KEY) {
+    console.error("❌ RAPIDAPI_KEY belum diset");
+    process.exit(1);
+}
+
 const api = axios.create({
     baseURL: "https://v3.football.api-sports.io",
     headers: {
         "x-rapidapi-key": RAPIDAPI_KEY,
         "x-rapidapi-host": "v3.football.api-sports.io"
-    }
+    },
+    timeout: 10000
 });
 
-// =====================================
+// SAFE REQUEST
+async function safeGet(url, params = {}, label = "") {
+    try {
+        const res = await api.get(url, { params });
+        return res.data.response;
+    } catch (err) {
+        console.log(`❌ ${label} error:`, err.response?.data || err.message);
+        return null;
+    }
+}
+
 // TELEGRAM
-// =====================================
 async function sendTelegram(text) {
     await axios.post(
         `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -29,113 +41,67 @@ async function sendTelegram(text) {
     );
 }
 
-// =====================================
-// FIXTURES (REAL TIME)
-// =====================================
-async function getFixtures() {
-    const res = await api.get("/fixtures", {
-        params: {
-            league: 1, // World Cup
-            season: 2026
-        }
-    });
-
-    return res.data.response || [];
-}
-
-// =====================================
-// STANDINGS
-// =====================================
-async function getStandings() {
-    const res = await api.get("/standings", {
-        params: {
-            league: 1,
-            season: 2026
-        }
-    });
-
-    return res.data.response?.[0]?.league?.standings || [];
-}
-
-// =====================================
-// TOP SCORERS
-// =====================================
-async function getTopScorers() {
-    const res = await api.get("/players/topscorers", {
-        params: {
-            league: 1,
-            season: 2026
-        }
-    });
-
-    return res.data.response || [];
-}
-
-// =====================================
-// FORMAT
-// =====================================
-function shorten(t, n = 20) {
-    if (!t) return "-";
-    return t.length > n ? t.slice(0, n - 3) + "..." : t;
-}
-
-// =====================================
-// DASHBOARD BUILDER
-// =====================================
+// DASHBOARD
 async function buildDashboard() {
-    let msg = "🏆 *FIFA WORLD CUP 2026 DASHBOARD*\n\n";
+    let msg = "🏆 *WORLD CUP STYLE DASHBOARD*\n\n";
 
-    try {
-        // FIXTURES
-        const fixtures = await getFixtures();
+    // FIXTURES (fallback aman)
+    const fixtures = await safeGet("/fixtures", {
+        season: 2026
+    }, "fixtures");
 
-        msg += "📅 *Fixtures*\n";
+    msg += "📅 *Fixtures*\n";
+
+    if (fixtures) {
         fixtures.slice(0, 5).forEach(f => {
-            msg += `• ${shorten(f.teams.home.name)} vs ${shorten(f.teams.away.name)}\n`;
+            msg += `• ${f.teams.home.name} vs ${f.teams.away.name}\n`;
         });
-
-        msg += "\n";
-
-        // STANDINGS
-        const standings = await getStandings();
-
-        msg += "📊 *Group Standings*\n";
-
-        standings.slice(0, 1).forEach(group => {
-            msg += `\n🏷 ${group[0].group}\n`;
-
-            group.slice(0, 4).forEach(team => {
-                msg += `${team.rank}. ${shorten(team.team.name, 18)} - ${team.points} pts\n`;
-            });
-        });
-
-        msg += "\n";
-
-        // TOP SCORERS
-        const scorers = await getTopScorers();
-
-        msg += "⚽ *Top Scorers*\n";
-
-        scorers.slice(0, 5).forEach((p, i) => {
-            msg += `${i + 1}. ${shorten(p.player.name, 18)} - ${p.statistics[0].goals.total} goals\n`;
-        });
-
-        if (msg.length > 3900) {
-            msg = msg.slice(0, 3900) + "\n...(cut)";
-        }
-
-        return msg;
-
-    } catch (err) {
-        console.error(err.response?.data || err.message);
-        return "⚠️ Failed to build dashboard";
+    } else {
+        msg += "• Data tidak tersedia\n";
     }
+
+    msg += "\n";
+
+    // STANDINGS (lebih aman tanpa league fixed)
+    const standings = await safeGet("/standings", {
+        season: 2026
+    }, "standings");
+
+    msg += "📊 *Standings*\n";
+
+    if (standings?.length) {
+        msg += "Data tersedia (lihat API plan)\n";
+    } else {
+        msg += "• Standings tidak tersedia untuk season ini\n";
+    }
+
+    msg += "\n";
+
+    // TOP SCORERS (safe fallback)
+    const scorers = await safeGet("/players/topscorers", {
+        season: 2026
+    }, "scorers");
+
+    msg += "⚽ *Top Scorers*\n";
+
+    if (scorers?.length) {
+        scorers.slice(0, 5).forEach((p, i) => {
+            msg += `${i + 1}. ${p.player.name} (${p.statistics?.[0]?.goals?.total || 0})\n`;
+        });
+    } else {
+        msg += "• Data top scorer tidak tersedia\n";
+    }
+
+    return msg;
 }
 
-// =====================================
 // RUN
-// =====================================
 (async () => {
-    const dashboard = await buildDashboard();
-    await sendTelegram(dashboard);
+    try {
+        const dashboard = await buildDashboard();
+        await sendTelegram(dashboard);
+        console.log("✅ Sent");
+    } catch (err) {
+        console.error("❌ Fatal:", err.response?.data || err.message);
+    }
 })();
