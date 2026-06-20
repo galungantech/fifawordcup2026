@@ -1,42 +1,64 @@
 const axios = require('axios');
 
-// Token Telegram tetap diambil dari GitHub Secrets
+// Token dari GitHub Secrets
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN; // Token baru dari email
 
-// Mendapatkan tanggal hari ini (Format: YYYY-MM-DD)
+// Mengambil tanggal hari ini (Format: YYYY-MM-DD)
 const today = new Date().toISOString().split('T')[0];
 
 async function getFootballData() {
     try {
-        // Menggunakan API publik ScoreBat yang menyediakan data pertandingan & video highlight gratis secara real-time
-        const response = await axios.get('https://www.scorebat.com/video-api/v3/feed/');
-        const matches = response.data.response;
+        // Mengambil data jadwal & hasil pertandingan hari ini untuk semua liga utama yang didukung tier gratis
+        const response = await axios.get('https://api.football-data.org/v4/matches', {
+            headers: { 'X-Auth-Token': FOOTBALL_DATA_TOKEN },
+            params: {
+                dateFrom: today,
+                dateTo: today
+            }
+        });
+
+        const matches = response.data.matches;
         
         if (!matches || matches.length === 0) {
-            console.log('Tidak ada data pertandingan masuk.');
-            return '📅 *Jadwal Pertandingan*\n\nBelum ada jadwal pertandingan terbaru untuk saat ini.';
+            console.log('Tidak ada pertandingan untuk hari ini.');
+            return `📅 *Jadwal Pertandingan (${today})*\n\nTidak ada jadwal pertandingan utama untuk hari ini.`;
         }
 
-        // Ambil maksimal 10-15 pertandingan terbaru agar tidak melebihi batas karakter Telegram
-        const limitedMatches = matches.slice(0, 12);
+        // Batasi maksimal 15 pertandingan agar pas di layar Telegram
+        const limitedMatches = matches.slice(0, 15);
 
-        // Mulai menyusun tabel ala Telegram
         let message = `🏆 *Hasil & Jadwal Pertandingan (${today})*\n\n`;
         message += `\` Status | Pertandingan         \`\n`;
         message += `\`------------------------------\`\n`;
 
         limitedMatches.forEach(match => {
-            // Karena ScoreBat fokus ke laga yang baru selesai/live, status diatur default ke FT atau LIVE
-            let status = 'FT'; 
+            let status = match.status;
+            
+            // Konversi status agar lebih singkat dan rapi
+            if (status === 'FINISHED') status = 'FT';
+            else if (status === 'IN_PLAY') status = 'LIVE';
+            else if (status === 'PAUSED') status = 'HT';
+            else if (status === 'TIMED' || status === 'SCHEDULED') {
+                // Jika belum mulai, ambil jamnya saja
+                const dateObj = new Date(match.utcDate);
+                status = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+            }
             status = status.padEnd(6);
 
-            // Memisahkan atau merapikan nama tim dari judul (Format ScoreBat biasanya: "Team A - Team B")
-            let title = match.title || '';
-            if (title.length > 20) {
-                title = title.substring(0, 17) + '...'; // Potong jika nama klub terlalu panjang agar tabel tidak rusak
+            const home = match.homeTeam.shortName || match.homeTeam.name;
+            const away = match.awayTeam.shortName || match.awayTeam.name;
+            
+            const homeScore = match.score.fullTime.home !== null ? match.score.fullTime.home : '-';
+            const awayScore = match.score.fullTime.away !== null ? match.score.fullTime.away : '-';
+            
+            // Potong teks jika nama tim terlalu panjang supaya tabel tidak berantakan
+            let matchText = `${home} ${homeScore} - ${awayScore} ${away}`;
+            if (matchText.length > 20) {
+                matchText = matchText.substring(0, 17) + '...';
             }
-            const matchText = title.padEnd(20);
+            matchText = matchText.padEnd(20);
             
             message += `\` ${status} | ${matchText} \`\n`;
         });
@@ -44,7 +66,7 @@ async function getFootballData() {
         return message;
 
     } catch (error) {
-        console.error('Gagal mengambil data dari API Publik:', error.message);
+        console.error('Gagal mengambil data:', error.message);
         return `⚠️ Gagal memuat jadwal otomatis untuk hari ini.\nError: ${error.message}`;
     }
 }
