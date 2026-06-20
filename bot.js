@@ -1,11 +1,12 @@
 const axios = require('axios');
 
+// Mengambil variabel rahasia dari GitHub Secrets
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
 if (!FOOTBALL_DATA_TOKEN) {
-    console.error("❌ FOOTBALL_DATA_TOKEN belum diset");
+    console.error("❌ Error: FOOTBALL_DATA_TOKEN belum diset di GitHub Secrets!");
     process.exit(1);
 }
 
@@ -13,14 +14,12 @@ const headers = {
     'X-Auth-Token': FOOTBALL_DATA_TOKEN
 };
 
-// ==========================================
-// UTIL (TABLE FORMAT)
-// ==========================================
-function pad(text, size) {
-    text = String(text ?? "-");
-    return text.length > size ? text.slice(0, size - 1) + "…" : text + " ".repeat(size - text.length);
-}
+// Mendapatkan tanggal hari ini (Format: YYYY-MM-DD)
+const today = new Date().toISOString().split('T')[0];
 
+// ==========================================
+// UTIL (FORMAT WAKTU & GRUP)
+// ==========================================
 function formatTime(utcDate) {
     return new Date(utcDate).toLocaleTimeString("id-ID", {
         timeZone: "Asia/Jakarta",
@@ -29,108 +28,129 @@ function formatTime(utcDate) {
     });
 }
 
+function cleanGroupText(groupName) {
+    if (!groupName) return "-";
+    // Mengubah format "GROUP_A" menjadi "A" agar hemat ruang kolom
+    return groupName.includes("GROUP_") ? groupName.replace("GROUP_", "") : groupName;
+}
+
 // ==========================================
-// SAFE REQUEST
+// SAFE REQUEST API
 // ==========================================
 async function safeGet(url, label) {
     try {
         const res = await axios.get(url, { headers });
         return res.data;
     } catch (err) {
-        console.log(`❌ ${label}:`, err.response?.status || err.message);
+        console.log(`❌ Gagal mengambil data ${label}:`, err.response?.status || err.message);
         return null;
     }
 }
 
 // ==========================================
-// TABLE MATCH RESULT (seperti gambar kamu)
+// FORMAT TABEL HASIL PERTANDINGAN (HTML NATIVE)
 // ==========================================
 function formatMatchTable(matches) {
-    let out =
-`📊 STATUS | PERTANDINGAN              | GRUP
-------------------------------------------------
-`;
+    if (!matches || matches.length === 0) {
+        return "<i>Tidak ada hasil pertandingan untuk hari ini.</i>";
+    }
 
-    (matches || []).slice(0, 8).forEach(m => {
-        const status = pad(m.status || "FT", 6);
+    let out = `<table>`;
+    out += `<tr><th>Status</th><th>Pertandingan</th><th>Grup</th></tr>`;
 
-        const home = m.homeTeam?.name || "-";
-        const away = m.awayTeam?.name || "-";
+    matches.slice(0, 10).forEach(m => {
+        let statusText = m.status;
+        
+        // Pemetaan status ke format visual ikon
+        if (statusText === 'FINISHED' || statusText === 'FT') {
+            statusText = "✅ FT";
+        } else if (statusText === 'IN_PLAY' || statusText === 'LIVE') {
+            statusText = "🔴 LIVE";
+        } else if (statusText === 'PAUSED' || statusText === 'HT') {
+            statusText = "⏳ HT";
+        } else {
+            statusText = "⏱️ -";
+        }
 
-        const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
+        const home = m.homeTeam?.shortName || m.homeTeam?.name || "-";
+        const away = m.awayTeam?.shortName || m.awayTeam?.name || "-";
+        const homeScore = m.score?.fullTime?.home ?? "-";
+        const awayScore = m.score?.fullTime?.away ?? "-";
 
-        const match = pad(`${home} ${score} ${away}`, 26);
-        const group = pad(m.group || "-", 4);
+        const matchText = `${home} ${homeScore} - ${awayScore} ${away}`;
+        const groupText = cleanGroupText(m.group);
 
-        out += `${status} | ${match} | ${group}\n`;
+        out += `<tr><td>${statusText}</td><td>${matchText}</td><td>${groupText}</td></tr>`;
     });
 
-    return `<pre>${out}</pre>`;
+    out += `</table>`;
+    return out;
 }
 
 // ==========================================
-// TABLE SCHEDULE (seperti gambar kamu)
+// FORMAT TABEL JADWAL PERTANDINGAN (HTML NATIVE)
 // ==========================================
 function formatScheduleTable(matches) {
-    let out =
-`⏰ WAKTU (WIB) | PERTANDINGAN
---------------------------------------------`;
+    if (!matches || matches.length === 0) {
+        return "<i>Tidak ada jadwal pertandingan untuk hari ini.</i>";
+    }
 
-    (matches || []).slice(0, 8).forEach(m => {
+    let out = `<table>`;
+    out += `<tr><th>Waktu (WIB)</th><th>Pertandingan</th><th>Grup</th></tr>`;
+
+    matches.slice(0, 10).forEach(m => {
         const time = formatTime(m.utcDate);
-        const home = m.homeTeam?.name || "-";
-        const away = m.awayTeam?.name || "-";
+        const home = m.homeTeam?.shortName || m.homeTeam?.name || "-";
+        const away = m.awayTeam?.shortName || m.awayTeam?.name || "-";
+        
+        const matchText = `${home} vs ${away}`;
+        const groupText = cleanGroupText(m.group);
 
-        out += `\n${pad(time, 12)} | ${home} vs ${away}`;
+        out += `<tr><td>${time}</td><td>${matchText}</td><td>${groupText}</td></tr>`;
     });
 
-    return `<pre>${out}</pre>`;
+    out += `</table>`;
+    return out;
 }
 
 // ==========================================
 // DASHBOARD BUILDER
 // ==========================================
 async function buildDashboard() {
+    let msg = `🏆 <b>FOOTBALL UPDATE DASHBOARD</b>\n\n`;
 
-    let msg = `🏆 WORLD FOOTBALL DASHBOARD\n\n`;
-
-    // ======================================
-    // MATCHES (GLOBAL)
-    // ======================================
-    const matches = await safeGet(
-        'https://api.football-data.org/v4/matches',
+    // Ambil data pertandingan global hari ini
+    const dataMatches = await safeGet(
+        `https://api.football-data.org/v4/matches?dateFrom=${today}&dateTo=${today}`,
         'matches'
     );
 
-    msg += "📌 HASIL PERTANDINGAN\n";
-    msg += formatMatchTable(matches?.matches || []);
+    const allMatches = dataMatches?.matches || [];
 
-    msg += "\n\n📅 JADWAL SELANJUTNYA\n";
-    msg += formatScheduleTable(matches?.matches || []);
+    // Filter pertandingan yang sudah selesai/sedang jalan vs yang belum mulai
+    const finishedOrLive = allMatches.filter(m => ['FINISHED', 'IN_PLAY', 'PAUSED'].includes(m.status));
+    const upcomingMatches = allMatches.filter(m => ['TIMED', 'SCHEDULED'].includes(m.status));
 
-    msg += "\n";
+    // 1. Bagian Hasil Pertandingan Hari Ini
+    msg += `<b>📌 Hasil Pertandingan Hari Ini</b>\n`;
+    msg += formatMatchTable(finishedOrLive);
+    msg += `\n\n`;
 
-    // ======================================
-    // CHAMPIONS LEAGUE
-    // ======================================
-    const cl = await safeGet(
-        'https://api.football-data.org/v4/competitions/CL/matches',
-        'CL'
-    );
+    // 2. Bagian Jadwal Selanjutnya
+    msg += `<b>📅 Jadwal Selanjutnya (Malam & Besok Pagi)</b>\n`;
+    msg += formatScheduleTable(upcomingMatches);
+    msg += `\n`;
 
-    msg += "\n🏆 ELITE MATCHES (UCL)\n";
-    msg += formatScheduleTable(cl?.matches || []);
-
-    // LIMIT
+    // Batasi panjang pesan jika terlalu panjang (Maksimal batas Telegram 4096 karakter)
     if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(dipotong)";
+        msg = msg.slice(0, 3900) + "\n\n<i>(Beberapa data dipotong karena batas karakter...)</i>";
     }
 
     return msg;
 }
 
 // ==========================================
-// SEND TELEGRAM (HTML MODE)
+// KIRIM KE TELEGRAM (HTML MODE)
 // ==========================================
 async function sendTelegram(text) {
     try {
@@ -138,25 +158,25 @@ async function sendTelegram(text) {
             `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
             {
                 chat_id: TELEGRAM_CHAT_ID,
-                text,
-                parse_mode: "HTML"
+                text: text,
+                parse_mode: "HTML" // Menggunakan HTML mode agar tag <table> terbaca otomatis
             }
         );
-
-        console.log("✅ Telegram sent");
+        console.log("✅ Data tabel berhasil dikirim ke Telegram!");
     } catch (err) {
-        console.error("❌ Telegram error:", err.response?.data || err.message);
+        console.error("❌ Gagal mengirim ke Telegram:", err.response?.data || err.message);
     }
 }
 
 // ==========================================
-// RUN
+// MAIN EXECUTION
 // ==========================================
 (async () => {
     try {
+        console.log(`🤖 Memulai pemrosesan jadwal tanggal: ${today}`);
         const dashboard = await buildDashboard();
         await sendTelegram(dashboard);
     } catch (err) {
-        console.error("❌ Fatal:", err.response?.data || err.message);
+        console.error("❌ Fatal Error:", err.message);
     }
 })();
