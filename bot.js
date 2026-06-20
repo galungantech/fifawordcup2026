@@ -14,7 +14,7 @@ const headers = {
 };
 
 // ==========================================
-// UTIL (TABLE FORMAT)
+// UTIL (PAD & ESCAPE MARKDOWNV2)
 // ==========================================
 function pad(text, size) {
     text = String(text ?? "-");
@@ -27,6 +27,14 @@ function formatTime(utcDate) {
         hour: "2-digit",
         minute: "2-digit"
     });
+}
+
+function escapeMarkdownV2(text) {
+    return text.replace(/([\_\*
+
+\[\]
+
+\(\)\~\`\>\#\+\-\=\|\{\}\.\!])/g, '\\$1');
 }
 
 // ==========================================
@@ -43,92 +51,92 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// TABLE MATCH RESULT (Ubah ke Link HTML Table Render)
+// TABLE MATCH RESULT (Native Table)
 // ==========================================
 function formatMatchTable(matches) {
-    let rows = `<tr><th style='background:#2ecc71;color:#fff;padding:8px;'>STATUS</th><th style='background:#2ecc71;color:#fff;padding:8px;'>PERTANDINGAN</th><th style='background:#2ecc71;color:#fff;padding:8px;'>GRUP</th></tr>`;
+    let out =
+"STATUS | PERTANDINGAN                  | GRUP\n" +
+"-------|-------------------------------|------\n";
 
     (matches || []).slice(0, 8).forEach(m => {
         let statusText = m.status || "FT";
         if (statusText === "FINISHED") statusText = "✅ FT";
         if (statusText === "IN_PLAY") statusText = "🔴 LIVE";
 
+        const status = pad(statusText, 7);
         const home = m.homeTeam?.name || "-";
         const away = m.awayTeam?.name || "-";
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
-        
+
+        const match = pad(`${home} ${score} ${away}`, 29);
+
         let groupText = m.group || "-";
         if (groupText.includes("GROUP_")) groupText = groupText.replace("GROUP_", "");
+        const group = pad(groupText, 4);
 
-        rows += `<tr style='background:#f9f9f9;'><td style='padding:8px;border:1px solid #ddd;'>${statusText}</td><td style='padding:8px;border:1px solid #ddd;'>${home} ${score} ${away}</td><td style='padding:8px;border:1px solid #ddd;'>${groupText}</td></tr>`;
+        out += `${status} | ${match} | ${group}\n`;
     });
 
-    const html = `<table style='border-collapse:collapse;width:100%;font-family:sans-serif;'>${rows}</table>`;
-    return `<a href="https://html-to-image-render.vercel.app/?html=${encodeURIComponent(html)}">📊 Lihat Tabel Hasil</a>`;
+    return out;
 }
 
 // ==========================================
-// TABLE SCHEDULE (Ubah ke Link HTML Table Render)
+// TABLE SCHEDULE (Native Table)
 // ==========================================
 function formatScheduleTable(matches) {
-    let rows = `<tr><th style='background:#34495e;color:#fff;padding:8px;'>WAKTU (WIB)</th><th style='background:#34495e;color:#fff;padding:8px;'>PERTANDINGAN</th></tr>`;
+    let out =
+"WAKTU (WIB) | PERTANDINGAN\n" +
+"------------|-----------------------------------------\n";
 
     (matches || []).slice(0, 8).forEach(m => {
         const time = formatTime(m.utcDate);
         const home = m.homeTeam?.name || "-";
         const away = m.awayTeam?.name || "-";
 
-        rows += `<tr style='background:#f9f9f9;'><td style='padding:8px;border:1px solid #ddd;'>${time}</td><td style='padding:8px;border:1px solid #ddd;'>${home} vs ${away}</td></tr>`;
+        const match = pad(`${home} vs ${away}`, 39);
+
+        out += `${pad(time, 12)} | ${match}\n`;
     });
 
-    const html = `<table style='border-collapse:collapse;width:100%;font-family:sans-serif;'>${rows}</table>`;
-    return `<a href="https://html-to-image-render.vercel.app/?html=${encodeURIComponent(html)}">📅 Lihat Tabel Jadwal</a>`;
+    return out;
 }
 
 // ==========================================
 // DASHBOARD BUILDER
 // ==========================================
 async function buildDashboard() {
+    let msg = escapeMarkdownV2("🏆 WORLD FOOTBALL DASHBOARD\n\n");
 
-    let msg = `🏆 WORLD FOOTBALL DASHBOARD\n\n`;
-
-    // ======================================
-    // MATCHES (GLOBAL)
-    // ======================================
     const matches = await safeGet(
-        '[https://api.football-data.org/v4/matches](https://api.football-data.org/v4/matches)',
+        'https://api.football-data.org/v4/matches',
         'matches'
     );
 
-    msg += "📌 HASIL PERTANDINGAN\n";
+    msg += escapeMarkdownV2("📌 HASIL PERTANDINGAN\n");
     msg += formatMatchTable(matches?.matches || []);
 
-    msg += "\n\n📅 JADWAL SELANJUTNYA\n";
+    msg += escapeMarkdownV2("\n\n📅 JADWAL SELANJUTNYA\n");
     msg += formatScheduleTable(matches?.matches || []);
 
     msg += "\n";
 
-    // ======================================
-    // CHAMPIONS LEAGUE
-    // ======================================
     const cl = await safeGet(
-        '[https://api.football-data.org/v4/competitions/CL/matches](https://api.football-data.org/v4/competitions/CL/matches)',
+        'https://api.football-data.org/v4/competitions/CL/matches',
         'CL'
     );
 
-    msg += "\n🏆 ELITE MATCHES (UCL)\n";
+    msg += escapeMarkdownV2("\n🏆 ELITE MATCHES (UCL)\n");
     msg += formatScheduleTable(cl?.matches || []);
 
-    // LIMIT
     if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(dipotong)";
+        msg = msg.slice(0, 3900) + escapeMarkdownV2("\n...(dipotong)");
     }
 
     return msg;
 }
 
 // ==========================================
-// SEND TELEGRAM (HTML MODE KEMBALI)
+// SEND TELEGRAM
 // ==========================================
 async function sendTelegram(text) {
     try {
@@ -137,7 +145,7 @@ async function sendTelegram(text) {
             {
                 chat_id: TELEGRAM_CHAT_ID,
                 text,
-                parse_mode: "HTML" // Kembali menggunakan HTML murni
+                parse_mode: "MarkdownV2"
             }
         );
 
