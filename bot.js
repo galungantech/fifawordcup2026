@@ -29,13 +29,9 @@ function formatTime(utcDate) {
     });
 }
 
-// ✅ Regex HARUS satu baris penuh, tidak boleh dipotong
+// ✅ Diperbaiki: Regex disatukan dalam satu baris agar tidak memicu SyntaxError
 function escapeMarkdownV2(text) {
-    return text.replace(/([_\*
-
-\[\]
-
-\(\)\~`\>\#\+\-\=\|\{\}\.\!<>])/g, '\\$1');
+    return text.replace(/([_\*\[\]\(\)\~\`\>\#\+\-\=\|\{\}\.\!<>])/g, '\\$1');
 }
 
 // ==========================================
@@ -56,8 +52,8 @@ async function safeGet(url, label) {
 // ==========================================
 function formatMatchTable(matches) {
     let out =
-"STATUS | PERTANDINGAN                  | GRUP\n" +
-"-------|-------------------------------|------\n";
+" STATUS | PERTANDINGAN                  | GRUP \n" +
+"--------|-------------------------------|------\n";
 
     (matches || []).slice(0, 8).forEach(m => {
         let statusText = m.status || "FT";
@@ -78,7 +74,8 @@ function formatMatchTable(matches) {
         out += `${status} | ${match} | ${group}\n`;
     });
 
-    return out;
+    // Dibungkus sintaks table native Telegram agar langsung membentuk grid kotak
+    return "```table\n" + out + "```";
 }
 
 // ==========================================
@@ -86,8 +83,8 @@ function formatMatchTable(matches) {
 // ==========================================
 function formatScheduleTable(matches) {
     let out =
-"WAKTU (WIB) | PERTANDINGAN\n" +
-"------------|-----------------------------------------\n";
+" WAKTU (WIB) | PERTANDINGAN\n" +
+"--------------|-----------------------------------------\n";
 
     (matches || []).slice(0, 8).forEach(m => {
         const time = formatTime(m.utcDate);
@@ -96,10 +93,11 @@ function formatScheduleTable(matches) {
 
         const match = pad(`${home} vs ${away}`, 39);
 
-        out += `${pad(time, 12)} | ${match}\n`;
+        out += `${pad(time, 13)} | ${match}\n`;
     });
 
-    return out;
+    // Dibungkus sintaks table native Telegram agar langsung membentuk grid kotak
+    return "```table\n" + out + "```";
 }
 
 // ==========================================
