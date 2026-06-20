@@ -1,10 +1,9 @@
-name: Send Football Table to Telegram
+name: Send Football Dashboard to Telegram
 
 on:
   schedule:
-    # Berjalan otomatis setiap jam 06:00 WIB (23:00 UTC) dan 18:00 WIB (11:00 UTC)
     - cron: '0 23,11 * * *'
-  workflow_dispatch: # Memunculkan tombol "Run workflow" di GitHub agar bisa tes manual
+  workflow_dispatch:
 
 jobs:
   send-updates:
@@ -17,14 +16,14 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20' # <-- Diperbaiki dari node-node menjadi node-version
+        node-version: '20'
 
     - name: Install Dependencies
-      run: npm install axios
+      run: npm install axios puppeteer form-data
 
     - name: Execute Bot Script
-      env: # <-- Indentasi spasi dirapikan agar sejajar
-          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      run: node bot.js # <-- Indentasi spasi dirapikan agar sejajar
+      env:
+        FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: node bot.js
