@@ -7,7 +7,7 @@ const { renderImage } = require("./imageRenderer");
 // ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const MESSAGE_ID = process.env.MESSAGE_ID; // <-- PENTING (simpan dari pesan pertama)
+const MESSAGE_ID = 114; // <-- PENTING (simpan dari pesan pertama)
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
 const headers = {
