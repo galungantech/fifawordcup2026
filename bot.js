@@ -14,14 +14,24 @@ const headers = {
 };
 
 // ==========================================
-// UTIL
+// UTIL (TABLE FORMAT)
 // ==========================================
-function shorten(text, max = 24) {
-    if (!text) return '-';
-    return text.length > max ? text.substring(0, max - 3) + '...' : text;
+function pad(text, size) {
+    text = String(text ?? "-");
+    return text.length > size ? text.slice(0, size - 1) + "…" : text + " ".repeat(size - text.length);
 }
 
+function formatTime(utcDate) {
+    return new Date(utcDate).toLocaleTimeString("id-ID", {
+        timeZone: "Asia/Jakarta",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+
+// ==========================================
 // SAFE REQUEST
+// ==========================================
 async function safeGet(url, label) {
     try {
         const res = await axios.get(url, { headers });
@@ -33,29 +43,70 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// BUILD DASHBOARD
+// TABLE MATCH RESULT (seperti gambar kamu)
+// ==========================================
+function formatMatchTable(matches) {
+    let out =
+`📊 STATUS | PERTANDINGAN              | GRUP
+------------------------------------------------
+`;
+
+    (matches || []).slice(0, 8).forEach(m => {
+        const status = pad(m.status || "FT", 6);
+
+        const home = m.homeTeam?.name || "-";
+        const away = m.awayTeam?.name || "-";
+
+        const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
+
+        const match = pad(`${home} ${score} ${away}`, 26);
+        const group = pad(m.group || "-", 4);
+
+        out += `${status} | ${match} | ${group}\n`;
+    });
+
+    return `<pre>${out}</pre>`;
+}
+
+// ==========================================
+// TABLE SCHEDULE (seperti gambar kamu)
+// ==========================================
+function formatScheduleTable(matches) {
+    let out =
+`⏰ WAKTU (WIB) | PERTANDINGAN
+--------------------------------------------`;
+
+    (matches || []).slice(0, 8).forEach(m => {
+        const time = formatTime(m.utcDate);
+        const home = m.homeTeam?.name || "-";
+        const away = m.awayTeam?.name || "-";
+
+        out += `\n${pad(time, 12)} | ${home} vs ${away}`;
+    });
+
+    return `<pre>${out}</pre>`;
+}
+
+// ==========================================
+// DASHBOARD BUILDER
 // ==========================================
 async function buildDashboard() {
 
-    let msg = "🏆 *WORLD FOOTBALL DASHBOARD*\n\n";
+    let msg = `🏆 WORLD FOOTBALL DASHBOARD\n\n`;
 
     // ======================================
-    // RECENT / GLOBAL MATCHES
+    // MATCHES (GLOBAL)
     // ======================================
     const matches = await safeGet(
         'https://api.football-data.org/v4/matches',
         'matches'
     );
 
-    msg += "📅 *Recent Matches*\n";
+    msg += "📌 HASIL PERTANDINGAN\n";
+    msg += formatMatchTable(matches?.matches || []);
 
-    if (matches?.matches?.length) {
-        matches.matches.slice(0, 5).forEach(m => {
-            msg += `• ${shorten(m.homeTeam?.name)} ${m.score?.fullTime?.home ?? '-'}-${m.score?.fullTime?.away ?? '-'} ${shorten(m.awayTeam?.name)}\n`;
-        });
-    } else {
-        msg += "• Tidak ada data match saat ini\n";
-    }
+    msg += "\n\n📅 JADWAL SELANJUTNYA\n";
+    msg += formatScheduleTable(matches?.matches || []);
 
     msg += "\n";
 
@@ -67,90 +118,19 @@ async function buildDashboard() {
         'CL'
     );
 
-    msg += "🏆 *Elite Matches (Champions League)*\n";
+    msg += "\n🏆 ELITE MATCHES (UCL)\n";
+    msg += formatScheduleTable(cl?.matches || []);
 
-    if (cl?.matches?.length) {
-        cl.matches.slice(0, 5).forEach(m => {
-            msg += `• ${shorten(m.homeTeam?.name)} vs ${shorten(m.awayTeam?.name)}\n`;
-        });
-    } else {
-        msg += "• Tidak ada data tersedia\n";
-    }
-
-    msg += "\n";
-
-    // ======================================
-    // PREMIER LEAGUE
-    // ======================================
-    const pl = await safeGet(
-        'https://api.football-data.org/v4/competitions/PL/matches?matchday=1',
-        'PL'
-    );
-
-    msg += "🏴 *Premier League Highlights*\n";
-
-    if (pl?.matches?.length) {
-        pl.matches.slice(0, 5).forEach(m => {
-            msg += `• ${shorten(m.homeTeam?.name)} vs ${shorten(m.awayTeam?.name)}\n`;
-        });
-    } else {
-        msg += "• Tidak ada data tersedia\n";
-    }
-
-    msg += "\n";
-
-    // ======================================
-    // BUNDESLIGA STANDINGS
-    // ======================================
-    const standings = await safeGet(
-        'https://api.football-data.org/v4/competitions/BL1/standings',
-        'standings'
-    );
-
-    msg += "📊 *Bundesliga Top 5*\n";
-
-    const table = standings?.standings?.find(s => s.type === 'TOTAL')?.table || [];
-
-    if (table.length) {
-        table.slice(0, 5).forEach(t => {
-            msg += `${t.position}. ${shorten(t.team?.name, 18)} (${t.points})\n`;
-        });
-    } else {
-        msg += "• Tidak ada data standings\n";
-    }
-
-    msg += "\n";
-
-    // ======================================
-    // SERIE A TOP SCORERS
-    // ======================================
-    const scorers = await safeGet(
-        'https://api.football-data.org/v4/competitions/SA/scorers',
-        'scorers'
-    );
-
-    msg += "⚽ *Serie A Top Scorers*\n";
-
-    if (scorers?.scorers?.length) {
-        scorers.scorers.slice(0, 5).forEach((s, i) => {
-            msg += `${i + 1}. ${shorten(s.player?.name, 18)} (${s.goals})\n`;
-        });
-    } else {
-        msg += "• Tidak ada data top scorer\n";
-    }
-
-    // ======================================
-    // LIMIT TELEGRAM
-    // ======================================
+    // LIMIT
     if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(cut)";
+        msg = msg.slice(0, 3900) + "\n...(dipotong)";
     }
 
     return msg;
 }
 
 // ==========================================
-// SEND TELEGRAM
+// SEND TELEGRAM (HTML MODE)
 // ==========================================
 async function sendTelegram(text) {
     try {
@@ -159,7 +139,7 @@ async function sendTelegram(text) {
             {
                 chat_id: TELEGRAM_CHAT_ID,
                 text,
-                parse_mode: "Markdown"
+                parse_mode: "HTML"
             }
         );
 
@@ -177,6 +157,6 @@ async function sendTelegram(text) {
         const dashboard = await buildDashboard();
         await sendTelegram(dashboard);
     } catch (err) {
-        console.error("❌ Fatal error:", err.response?.data || err.message);
+        console.error("❌ Fatal:", err.response?.data || err.message);
     }
 })();
