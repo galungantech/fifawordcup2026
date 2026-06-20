@@ -20,10 +20,7 @@ async function renderImage(htmlContent) {
                 color: white;
             }
 
-            h2 {
-                margin-bottom: 10px;
-                color: #facc15;
-            }
+            h2 { color: #facc15; }
 
             table {
                 width: 100%;
