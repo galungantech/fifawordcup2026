@@ -1,14 +1,17 @@
+// ==========================
+// HTML <table> → ASCII TABLE ENGINE
+// ==========================
+
 function stripTags(str) {
-    return String(str)
+    return String(str || "")
         .replace(/<[^>]*>/g, "")
         .replace(/\s+/g, " ")
         .trim();
 }
 
-// ambil isi <tr><td>...</td></tr>
 function parseHTMLTable(html) {
-    const rowRegex = /<tr>(.*?)<\/tr>/g;
-    const cellRegex = /<t[dh]>(.*?)<\/t[dh]>/g;
+    const rowRegex = /<tr>(.*?)<\/tr>/gs;
+    const cellRegex = /<t[dh]>(.*?)<\/t[dh]>/gs;
 
     const rows = [];
     let rowMatch;
@@ -29,26 +32,23 @@ function parseHTMLTable(html) {
     return rows;
 }
 
-// hitung lebar kolom
 function getColWidths(rows) {
     const widths = [];
 
     rows.forEach(row => {
         row.forEach((cell, i) => {
-            widths[i] = Math.max(widths[i] || 0, cell.length);
+            widths[i] = Math.max(widths[i] || 0, String(cell).length);
         });
     });
 
     return widths;
 }
 
-// padding
-function pad(text, size) {
-    text = String(text);
-    return text + " ".repeat(Math.max(0, size - text.length));
+function pad(str, size) {
+    str = String(str ?? "");
+    return str + " ".repeat(Math.max(0, size - str.length));
 }
 
-// build ASCII table
 function buildTable(rows) {
     const widths = getColWidths(rows);
 
@@ -63,19 +63,16 @@ function buildTable(rows) {
 
         out += lineRow + "\n";
 
-        if (i === 0) {
-            out += line + "\n";
-        }
+        if (i === 0) out += line + "\n";
     });
 
     return out;
 }
 
-// MAIN RENDER FUNCTION
 function renderHTMLTable(html) {
     const rows = parseHTMLTable(html);
 
-    if (!rows.length) return "";
+    if (!rows.length) return "```\n(empty)\n```";
 
     const table = buildTable(rows);
 
