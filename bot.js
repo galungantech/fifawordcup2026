@@ -14,7 +14,7 @@ const headers = {
 };
 
 // ==========================================
-// UTIL (TABLE FORMAT)
+// UTIL (TABLE FORMAT & ESCAPE MARKDOWNV2)
 // ==========================================
 function pad(text, size) {
     text = String(text ?? "-");
@@ -27,6 +27,11 @@ function formatTime(utcDate) {
         hour: "2-digit",
         minute: "2-digit"
     });
+}
+
+// Fungsi otomatis untuk mengamankan karakter reserved di luar blok tabel
+function escapeMarkdownV2(text) {
+    return text.replace(/([\_\*\[\]\(\)\~\`\>\#\+\-\=\|\{\}\.\!])/g, '\\$1');
 }
 
 // ==========================================
@@ -43,7 +48,7 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// TABLE MATCH RESULT (Hanya Mengubah Bagian Ini)
+// TABLE MATCH RESULT 
 // ==========================================
 function formatMatchTable(matches) {
     let out =
@@ -70,12 +75,11 @@ function formatMatchTable(matches) {
         out += `${status} | ${match} | ${group}\n`;
     });
 
-    // Menggunakan pembungkus 'table' agar Telegram merendernya sebagai tabel fisik kotak-kotak
     return `\`\`\`table\n${out}\`\`\``;
 }
 
 // ==========================================
-// TABLE SCHEDULE (Hanya Mengubah Bagian Ini)
+// TABLE SCHEDULE
 // ==========================================
 function formatScheduleTable(matches) {
     let out =
@@ -92,54 +96,47 @@ function formatScheduleTable(matches) {
         out += `\n ${pad(time, 12)} | ${match}`;
     });
 
-    // Menggunakan pembungkus 'table' agar Telegram merendernya sebagai tabel fisik kotak-kotak
     return `\`\`\`table\n${out}\`\`\``;
 }
 
 // ==========================================
-// DASHBOARD BUILDER
+// DASHBOARD BUILDER (Tetap Utuh, Hanya Teks Judul Di-escape)
 // ==========================================
 async function buildDashboard() {
 
-    let msg = `🏆 WORLD FOOTBALL DASHBOARD\n\n`;
+    // Semua teks narasi luar wajib dibungkus escapeMarkdownV2 agar tidak error
+    let msg = escapeMarkdownV2("🏆 WORLD FOOTBALL DASHBOARD\n\n");
 
-    // ======================================
-    // MATCHES (GLOBAL)
-    // ======================================
     const matches = await safeGet(
         'https://api.football-data.org/v4/matches',
         'matches'
     );
 
-    msg += "📌 HASIL PERTANDINGAN\n";
+    msg += escapeMarkdownV2("📌 HASIL PERTANDINGAN\n");
     msg += formatMatchTable(matches?.matches || []);
 
-    msg += "\n\n📅 JADWAL SELANJUTNYA\n";
+    msg += escapeMarkdownV2("\n\n📅 JADWAL SELANJUTNYA\n");
     msg += formatScheduleTable(matches?.matches || []);
 
     msg += "\n";
 
-    // ======================================
-    // CHAMPIONS LEAGUE
-    // ======================================
     const cl = await safeGet(
         'https://api.football-data.org/v4/competitions/CL/matches',
         'CL'
     );
 
-    msg += "\n🏆 ELITE MATCHES (UCL)\n";
+    msg += escapeMarkdownV2("\n🏆 ELITE MATCHES (UCL)\n");
     msg += formatScheduleTable(cl?.matches || []);
 
-    // LIMIT
     if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(dipotong)";
+        msg = msg.slice(0, 3900) + escapeMarkdownV2("\n...(dipotong)");
     }
 
     return msg;
 }
 
 // ==========================================
-// SEND TELEGRAM (Diubah ke MarkdownV2 agar fitur tabel aktif)
+// SEND TELEGRAM (HTML MODE)
 // ==========================================
 async function sendTelegram(text) {
     try {
@@ -148,7 +145,7 @@ async function sendTelegram(text) {
             {
                 chat_id: TELEGRAM_CHAT_ID,
                 text,
-                parse_mode: "MarkdownV2" // Wajib MarkdownV2 agar sintaks ```table dirender native
+                parse_mode: "MarkdownV2" 
             }
         );
 
