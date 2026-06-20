@@ -21,7 +21,7 @@ async function renderImage(htmlContent) {
             }
 
             h2 {
-                margin-bottom: 15px;
+                margin-bottom: 10px;
                 color: #facc15;
             }
 
@@ -35,30 +35,21 @@ async function renderImage(htmlContent) {
 
             th {
                 background: #1f2937;
-                padding: 12px;
+                padding: 10px;
                 text-align: left;
-                font-size: 14px;
             }
 
             td {
-                padding: 12px;
+                padding: 10px;
                 border-top: 1px solid #374151;
-                font-size: 14px;
             }
 
             tr:nth-child(even) {
                 background: #0f172a;
             }
 
-            .live {
-                color: #ef4444;
-                font-weight: bold;
-            }
-
-            .ft {
-                color: #22c55e;
-                font-weight: bold;
-            }
+            .live { color: #ef4444; font-weight: bold; }
+            .ft { color: #22c55e; font-weight: bold; }
         </style>
     </head>
     <body>
@@ -69,9 +60,7 @@ async function renderImage(htmlContent) {
 
     await page.setContent(fullHTML, { waitUntil: "networkidle0" });
 
-    const buffer = await page.screenshot({
-        fullPage: true
-    });
+    const buffer = await page.screenshot({ fullPage: true });
 
     await browser.close();
 
