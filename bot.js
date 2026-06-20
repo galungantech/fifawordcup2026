@@ -1,167 +1,189 @@
 const axios = require('axios');
 
-// Token dari GitHub Secrets
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
-// Tanggal hari ini
-const today = new Date().toISOString().split('T')[0];
+const headers = {
+    'X-Auth-Token': FOOTBALL_DATA_TOKEN
+};
 
-function formatWIB(utcDate) {
-    return new Date(utcDate).toLocaleTimeString('id-ID', {
+function formatTime(dateString) {
+    return new Date(dateString).toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: '2-digit',
         hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Jakarta'
+        minute: '2-digit'
     });
 }
 
-function escapeMarkdown(text) {
-    return text
-        .replace(/\|/g, '\\|')
-        .replace(/_/g, '\\_')
-        .replace(/\*/g, '\\*')
-        .replace(/`/g, '\\`');
+function shorten(text, max = 24) {
+    if (!text) return '-';
+    return text.length > max ? text.substring(0, max - 3) + '...' : text;
 }
 
-async function getFootballData() {
+async function getFootballReport() {
+    let msg = '⚽ *Football Report*\n\n';
+
     try {
-        const response = await axios.get(
+
+        // ==========================================
+        // MATCHES TODAY
+        // ==========================================
+        const matchesToday = await axios.get(
             'https://api.football-data.org/v4/matches',
-            {
-                headers: {
-                    'X-Auth-Token': FOOTBALL_DATA_TOKEN
-                },
-                params: {
-                    dateFrom: today,
-                    dateTo: today
-                }
-            }
+            { headers }
         );
 
-        const matches = response.data.matches || [];
+        msg += '🌍 *Pertandingan Hari Ini*\n';
 
-        if (matches.length === 0) {
-            return `📅 Tidak ada pertandingan hari ini`;
+        (matchesToday.data.matches || []).slice(0, 5).forEach(m => {
+            const home = shorten(m.homeTeam.name);
+            const away = shorten(m.awayTeam.name);
+
+            const hs = m.score.fullTime.home ?? '-';
+            const as = m.score.fullTime.away ?? '-';
+
+            msg += `• ${home} ${hs}-${as} ${away}\n`;
+        });
+
+        msg += '\n';
+
+        // ==========================================
+        // CHAMPIONS LEAGUE
+        // ==========================================
+        const cl = await axios.get(
+            'https://api.football-data.org/v4/competitions/CL/matches',
+            { headers }
+        );
+
+        msg += '🏆 *Champions League*\n';
+
+        (cl.data.matches || []).slice(0, 5).forEach(m => {
+            msg += `• ${shorten(m.homeTeam.name)} vs ${shorten(m.awayTeam.name)}\n`;
+        });
+
+        msg += '\n';
+
+        // ==========================================
+        // TEAM 86 SCHEDULED
+        // ==========================================
+        const team86 = await axios.get(
+            'https://api.football-data.org/v4/teams/86/matches?status=SCHEDULED',
+            { headers }
+        );
+
+        msg += '📅 *Team 86 Jadwal*\n';
+
+        (team86.data.matches || []).slice(0, 5).forEach(m => {
+            msg += `• ${formatTime(m.utcDate)}\n`;
+            msg += `  ${shorten(m.homeTeam.name)} vs ${shorten(m.awayTeam.name)}\n`;
+        });
+
+        msg += '\n';
+
+        // ==========================================
+        // PERSON 2019 MATCHES
+        // ==========================================
+        const person = await axios.get(
+            'https://api.football-data.org/v4/persons/2019/matches?status=FINISHED',
+            { headers }
+        );
+
+        msg += '⚽ *Person 2019 Matches*\n';
+
+        (person.data.matches || []).slice(0, 5).forEach(m => {
+            msg += `• ${m.homeTeam.name} ${m.score.fullTime.home}-${m.score.fullTime.away} ${m.awayTeam.name}\n`;
+        });
+
+        msg += '\n';
+
+        // ==========================================
+        // PREMIER LEAGUE MATCHDAY 11
+        // ==========================================
+        const pl = await axios.get(
+            'https://api.football-data.org/v4/competitions/PL/matches?matchday=11',
+            { headers }
+        );
+
+        msg += '🏴 *Premier League MD11*\n';
+
+        (pl.data.matches || []).slice(0, 5).forEach(m => {
+            msg += `• ${shorten(m.homeTeam.name)} vs ${shorten(m.awayTeam.name)}\n`;
+        });
+
+        msg += '\n';
+
+        // ==========================================
+        // BUNDESLIGA STANDINGS
+        // ==========================================
+        const standings = await axios.get(
+            'https://api.football-data.org/v4/competitions/DED/standings',
+            { headers }
+        );
+
+        msg += '📊 *Bundesliga Top 5*\n';
+
+        const table =
+            standings.data.standings?.find(
+                s => s.type === 'TOTAL'
+            )?.table || [];
+
+        table.slice(0, 5).forEach(t => {
+            msg += `${t.position}. ${shorten(t.team.name, 18)} (${t.points} pts)\n`;
+        });
+
+        msg += '\n';
+
+        // ==========================================
+        // SERIE A SCORERS
+        // ==========================================
+        const scorers = await axios.get(
+            'https://api.football-data.org/v4/competitions/SA/scorers',
+            { headers }
+        );
+
+        msg += '👟 *Serie A Top Scorers*\n';
+
+        (scorers.data.scorers || []).slice(0, 5).forEach((s, idx) => {
+            msg += `${idx + 1}. ${shorten(s.player.name, 20)} (${s.goals} gol)\n`;
+        });
+
+        // Telegram limit 4096
+        if (msg.length > 3900) {
+            msg = msg.substring(0, 3900);
+            msg += '\n\n...(dipotong)';
         }
 
-        const finishedMatches = [];
-        const upcomingMatches = [];
+        return msg;
 
-        for (const match of matches) {
-            const home =
-                match.homeTeam.shortName ||
-                match.homeTeam.tla ||
-                match.homeTeam.name;
-
-            const away =
-                match.awayTeam.shortName ||
-                match.awayTeam.tla ||
-                match.awayTeam.name;
-
-            const group =
-                match.group ||
-                match.stage ||
-                '-';
-
-            if (
-                match.status === 'FINISHED' ||
-                match.status === 'IN_PLAY' ||
-                match.status === 'PAUSED'
-            ) {
-                let status = 'FT';
-
-                if (match.status === 'IN_PLAY') {
-                    status = 'LIVE';
-                }
-
-                if (match.status === 'PAUSED') {
-                    status = 'HT';
-                }
-
-                const homeScore =
-                    match.score.fullTime.home ??
-                    match.score.halfTime.home ??
-                    '-';
-
-                const awayScore =
-                    match.score.fullTime.away ??
-                    match.score.halfTime.away ??
-                    '-';
-
-                finishedMatches.push({
-                    status,
-                    match: `${home} ${homeScore}-${awayScore} ${away}`,
-                    group
-                });
-            } else {
-                upcomingMatches.push({
-                    time: formatWIB(match.utcDate),
-                    match: `${home} vs ${away}`,
-                    group
-                });
-            }
-        }
-
-        let message = '';
-
-        if (finishedMatches.length > 0) {
-            message += `🏆 Hasil Pertandingan Hari Ini (${new Date().toLocaleDateString('id-ID')})\n\n`;
-
-            message += '| Status | Pertandingan | Grup |\n';
-            message += '|--------|--------------|------|\n';
-
-            finishedMatches.slice(0, 20).forEach(row => {
-                message += `| ✅ ${escapeMarkdown(row.status)} | ${escapeMarkdown(row.match)} | ${escapeMarkdown(row.group)} |\n`;
-            });
-
-            message += '\n';
-        }
-
-        if (upcomingMatches.length > 0) {
-            message += '📅 Jadwal Selanjutnya\n\n';
-
-            message += '| Waktu (WIB) | Pertandingan | Grup |\n';
-            message += '|-------------|--------------|------|\n';
-
-            upcomingMatches
-                .sort((a, b) => a.time.localeCompare(b.time))
-                .slice(0, 20)
-                .forEach(row => {
-                    message += `| ${escapeMarkdown(row.time)} | ${escapeMarkdown(row.match)} | ${escapeMarkdown(row.group)} |\n`;
-                });
-        }
-
-        return message;
-    } catch (error) {
-        console.error(error);
-        return `⚠️ Gagal mengambil data pertandingan\n${error.message}`;
+    } catch (err) {
+        console.error(err.response?.data || err.message);
+        return `⚠️ Gagal mengambil data\n${err.message}`;
     }
 }
 
-async function sendToTelegram(message) {
+async function sendTelegram(text) {
     try {
         await axios.post(
             `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
             {
                 chat_id: TELEGRAM_CHAT_ID,
-                text: message,
+                text,
                 parse_mode: 'Markdown'
             }
         );
 
         console.log('Pesan berhasil dikirim');
-    } catch (error) {
+    } catch (err) {
         console.error(
-            'Gagal kirim:',
-            error.response?.data || error.message
+            err.response?.data || err.message
         );
     }
 }
 
-async function run() {
-    const message = await getFootballData();
-    await sendToTelegram(message);
-}
-
-run();
+(async () => {
+    const report = await getFootballReport();
+    await sendTelegram(report);
+})();
