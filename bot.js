@@ -1,165 +1,170 @@
-const axios = require('axios');
+const axios = require("axios");
 
+// ==========================
+// CONFIG
+// ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
-if (!FOOTBALL_DATA_TOKEN) {
-    console.error("❌ FOOTBALL_DATA_TOKEN belum diset");
-    process.exit(1);
-}
-
 const headers = {
-    'X-Auth-Token': FOOTBALL_DATA_TOKEN
+    "X-Auth-Token": FOOTBALL_DATA_TOKEN
 };
 
-// ==========================================
-// UTIL (TABLE FORMAT)
-// ==========================================
-function pad(text, size) {
-    text = String(text ?? "-");
-    return text.length > size ? text.slice(0, size - 1) + "…" : text + " ".repeat(size - text.length);
+// ==========================
+// UTILS
+// ==========================
+function pad(str, size) {
+    str = String(str ?? "-");
+    return str.length > size ? str.slice(0, size - 1) + "…" : str + " ".repeat(size - str.length);
 }
 
-function formatTime(utcDate) {
-    return new Date(utcDate).toLocaleTimeString("id-ID", {
+function timeWIB(date) {
+    return new Date(date).toLocaleTimeString("id-ID", {
         timeZone: "Asia/Jakarta",
         hour: "2-digit",
         minute: "2-digit"
     });
 }
 
-// ==========================================
-// SAFE REQUEST
-// ==========================================
-async function safeGet(url, label) {
+// ==========================
+// SAFE FETCH
+// ==========================
+async function get(url, label) {
     try {
         const res = await axios.get(url, { headers });
         return res.data;
-    } catch (err) {
-        console.log(`❌ ${label}:`, err.response?.status || err.message);
+    } catch (e) {
+        console.log("❌", label, e.response?.status || e.message);
         return null;
     }
 }
 
-// ==========================================
-// TABLE MATCH RESULT (Menggunakan format tabel HTML murni)
-// ==========================================
-function formatMatchTable(matches) {
-    let rows = "";
+// ==========================
+// TABLE RENDER ENGINE (CORE)
+// ==========================
+function renderTable(headers, rows) {
+    const colWidths = headers.map((h, i) =>
+        Math.max(
+            h.length,
+            ...rows.map(r => String(r[i] ?? "").length)
+        )
+    );
 
-    (matches || []).slice(0, 8).forEach(m => {
-        let statusText = m.status || "FT";
-        if (statusText === "FINISHED") statusText = "✅ FT";
-        else if (statusText === "IN_PLAY") statusText = "🔴 LIVE";
-        else if (statusText === "TIMED" || statusText === "SCHEDULED") statusText = "🔜 Segera";
+    const formatRow = (row) =>
+        row.map((cell, i) => pad(cell, colWidths[i])).join(" | ");
 
-        const home = m.homeTeam?.name || "-";
-        const away = m.awayTeam?.name || "-";
-        
-        let scoreText = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
-        if (m.score?.fullTime?.home === null && m.score?.fullTime?.away === null) {
-            scoreText = "vs";
-        }
+    const line = colWidths.map(w => "-".repeat(w)).join("-|-");
 
-        let groupText = m.group || "-";
-        if (groupText.includes("GROUP_")) groupText = groupText.replace("GROUP_", "");
+    let out = "";
+    out += formatRow(headers) + "\n";
+    out += line + "\n";
 
-        rows += `<tr><td>${statusText}</td><td>${home} ${scoreText} ${away}</td><td>${groupText}</td></tr>\n`;
+    rows.forEach(r => {
+        out += formatRow(r) + "\n";
     });
 
-    // Mengembalikan bungkus tabel utuh agar lolos validasi HTML Telegram
-    return `<table>\n<tr><th>Status</th><th>Pertandingan</th><th>Grup</th></tr>\n${rows}</table>`;
+    return "```\n" + out + "```";
 }
 
-// ==========================================
-// TABLE SCHEDULE (Menggunakan format tabel HTML murni)
-// ==========================================
-function formatScheduleTable(matches) {
-    let rows = "";
+// ==========================
+// MATCH TABLE
+// ==========================
+function formatMatches(matches) {
+    const rows = (matches || []).slice(0, 10).map(m => {
+        let status = m.status;
 
-    (matches || []).slice(0, 8).forEach(m => {
-        const time = formatTime(m.utcDate);
-        const home = m.homeTeam?.name || "-";
-        const away = m.awayTeam?.name || "-";
+        if (status === "FINISHED") status = "FT";
+        if (status === "IN_PLAY") status = "LIVE";
 
-        rows += `<tr><td>${time}</td><td>${home} vs ${away}</td></tr>\n`;
+        const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
+
+        const match = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
+
+        let group = m.group || "-";
+        group = group.replace("GROUP_", "");
+
+        return [status, match, group];
     });
 
-    // Mengembalikan bungkus tabel utuh agar lolos validasi HTML Telegram
-    return `<table>\n<tr><th>Waktu (WIB)</th><th>Pertandingan</th></tr>\n${rows}</table>`;
+    return renderTable(
+        ["STATUS", "MATCH", "GRP"],
+        rows
+    );
 }
 
-// ==========================================
-// DASHBOARD BUILDER (Tetap Utuh Seperti Aslinya)
-// ==========================================
+// ==========================
+// SCHEDULE TABLE
+// ==========================
+function formatSchedule(matches) {
+    const rows = (matches || []).slice(0, 10).map(m => {
+        return [
+            timeWIB(m.utcDate),
+            `${m.homeTeam?.name} vs ${m.awayTeam?.name}`
+        ];
+    });
+
+    return renderTable(
+        ["WIB", "MATCH"],
+        rows
+    );
+}
+
+// ==========================
+// DASHBOARD BUILDER
+// ==========================
 async function buildDashboard() {
+    let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
 
-    let msg = `🏆 WORLD FOOTBALL DASHBOARD\n\n`;
-
-    // ======================================
-    // MATCHES (GLOBAL)
-    // ======================================
-    const matches = await safeGet(
-        'https://api.football-data.org/v4/matches',
-        'matches'
+    const matches = await get(
+        "https://api.football-data.org/v4/matches",
+        "matches"
     );
 
-    msg += "📌 HASIL PERTANDINGAN\n";
-    msg += formatMatchTable(matches?.matches || []);
+    msg += "📌 MATCH RESULTS\n";
+    msg += formatMatches(matches?.matches || []);
 
-    msg += "\n\n📅 JADWAL SELANJUTNYA\n";
-    msg += formatScheduleTable(matches?.matches || []);
+    msg += "\n\n📅 UPCOMING MATCHES\n";
+    msg += formatSchedule(matches?.matches || []);
 
-    msg += "\n";
-
-    // ======================================
-    // CHAMPIONS LEAGUE
-    // ======================================
-    const cl = await safeGet(
-        'https://api.football-data.org/v4/competitions/CL/matches',
-        'CL'
+    const ucl = await get(
+        "https://api.football-data.org/v4/competitions/CL/matches",
+        "ucl"
     );
 
-    msg += "\n🏆 ELITE MATCHES (UCL)\n";
-    msg += formatScheduleTable(cl?.matches || []);
+    msg += "\n\n🏆 CHAMPIONS LEAGUE\n";
+    msg += formatSchedule(ucl?.matches || []);
 
-    // LIMIT
     if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(dipotong)";
+        msg = msg.slice(0, 3900) + "\n...(cut)";
     }
 
     return msg;
 }
 
-// ==========================================
-// SEND TELEGRAM (Diperbaiki Properti "text" Agar Tidak Kosong)
-// ==========================================
-async function sendTelegram(htmlContent) {
-    try {
-        await axios.post(
-            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-            {
-                chat_id: TELEGRAM_CHAT_ID,
-                text: htmlContent, // Menggunakan properti "text" standar Telegram API
-                parse_mode: "HTML"
-            }
-        );
-
-        console.log("✅ Telegram HTML Table Berhasil Dikirim!");
-    } catch (err) {
-        console.error("❌ Telegram error:", err.response?.data || err.message);
-    }
+// ==========================
+// SEND TELEGRAM
+// ==========================
+async function sendTelegram(text) {
+    await axios.post(
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+        {
+            chat_id: TELEGRAM_CHAT_ID,
+            text,
+            parse_mode: "MarkdownV2"
+        }
+    );
 }
 
-// ==========================================
+// ==========================
 // RUN
-// ==========================================
+// ==========================
 (async () => {
     try {
         const dashboard = await buildDashboard();
         await sendTelegram(dashboard);
-    } catch (err) {
-        console.error("❌ Fatal:", err.response?.data || err.message);
+        console.log("✅ Sent");
+    } catch (e) {
+        console.log("❌ Fatal:", e.message);
     }
 })();
