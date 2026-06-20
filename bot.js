@@ -43,7 +43,7 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// TABLE MATCH RESULT (Menggunakan Format TR TD HTML)
+// TABLE MATCH RESULT (Format HTML Baris TR TD Murni)
 // ==========================================
 function formatMatchTable(matches) {
     let out = "";
@@ -57,8 +57,7 @@ function formatMatchTable(matches) {
         const home = m.homeTeam?.name || "-";
         const away = m.awayTeam?.name || "-";
         
-        // Cek skor, jika belum tanding berikan "vs"
-        let scoreText = `${m.score?.fullTime?.home ?? "-"} - ${m.score?.fullTime?.away ?? "-"}`;
+        let scoreText = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
         if (m.score?.fullTime?.home === null && m.score?.fullTime?.away === null) {
             scoreText = "vs";
         }
@@ -66,7 +65,7 @@ function formatMatchTable(matches) {
         let groupText = m.group || "-";
         if (groupText.includes("GROUP_")) groupText = groupText.replace("GROUP_", "");
 
-        // Menyusun string persis seperti format TR TD yang kamu minta
+        // Menghasilkan baris HTML murni yang akan disisipkan ke komponen Rich Message milikmu
         out += `<tr><td>${statusText}</td><td>${home} ${scoreText} ${away}</td><td>${groupText}</td></tr>\n`;
     });
 
@@ -74,7 +73,7 @@ function formatMatchTable(matches) {
 }
 
 // ==========================================
-// TABLE SCHEDULE (Menggunakan Format TR TD HTML)
+// TABLE SCHEDULE (Format HTML Baris TR TD Murni)
 // ==========================================
 function formatScheduleTable(matches) {
     let out = "";
@@ -84,7 +83,7 @@ function formatScheduleTable(matches) {
         const home = m.homeTeam?.name || "-";
         const away = m.awayTeam?.name || "-";
 
-        // Menyusun string jadwal ke format TR TD HTML
+        // Menghasilkan baris HTML murni yang akan disisipkan ke komponen Rich Message milikmu
         out += `<tr><td>${time}</td><td>${home} vs ${away}</td></tr>\n`;
     });
 
@@ -92,7 +91,7 @@ function formatScheduleTable(matches) {
 }
 
 // ==========================================
-// DASHBOARD BUILDER
+// DASHBOARD BUILDER (Tetap Utuh Menyusun String)
 // ==========================================
 async function buildDashboard() {
 
@@ -134,20 +133,25 @@ async function buildDashboard() {
 }
 
 // ==========================================
-// SEND TELEGRAM (Kembali ke HTML Mode)
+// SEND TELEGRAM (Menggunakan Rich Message Payload)
 // ==========================================
-async function sendTelegram(text) {
+async function sendTelegram(htmlContent) {
     try {
+        // Karena sistemmu mendukung format rich_message, kita bungkus strukturnya sesuai payload suksesmu
+        const payload = {
+            chat_id: TELEGRAM_CHAT_ID,
+            rich_message: {
+                html: htmlContent
+            }
+        };
+
+        // Ganti endpoint ke editMessageText jika bot ini tujuannya mengupdate pesan lama via ID
         await axios.post(
             `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-            {
-                chat_id: TELEGRAM_CHAT_ID,
-                text,
-                parse_mode: "HTML" // Diubah ke HTML agar tag <tr><td> tidak dianggap text biasa
-            }
+            payload
         );
 
-        console.log("✅ Telegram sent");
+        console.log("✅ Rich Table Telegram sent");
     } catch (err) {
         console.error("❌ Telegram error:", err.response?.data || err.message);
     }
