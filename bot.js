@@ -1,4 +1,5 @@
 const axios = require("axios");
+const FormData = require("form-data");
 const { renderImage } = require("./imageRenderer");
 
 // ==========================
@@ -13,7 +14,7 @@ const headers = {
 };
 
 // ==========================
-// FETCH SAFE
+// SAFE FETCH
 // ==========================
 async function get(url, label) {
     try {
@@ -50,11 +51,12 @@ function buildTable(headers, rows) {
 }
 
 // ==========================
-// FORMAT MATCHES
+// MATCHES
 // ==========================
 function formatMatches(matches) {
     const rows = (matches || []).slice(0, 6).map(m => {
         let status = m.status;
+
         if (status === "FINISHED") status = `<span class="ft">FT</span>`;
         if (status === "IN_PLAY") status = `<span class="live">LIVE</span>`;
 
@@ -72,7 +74,7 @@ function formatMatches(matches) {
 }
 
 // ==========================
-// FORMAT SCHEDULE
+// SCHEDULE
 // ==========================
 function formatSchedule(matches) {
     const rows = (matches || []).slice(0, 6).map(m => {
@@ -98,11 +100,17 @@ function formatSchedule(matches) {
 // ==========================
 async function buildDashboardHTML() {
 
-    const matches = await get("https://api.football-data.org/v4/matches", "matches");
+    const matches = await get(
+        "https://api.football-data.org/v4/matches",
+        "matches"
+    );
 
-    const ucl = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
+    const ucl = await get(
+        "https://api.football-data.org/v4/competitions/CL/matches",
+        "ucl"
+    );
 
-    const html = `
+    return `
 <h2>⚽ WORLD FOOTBALL DASHBOARD</h2>
 
 <h3>📌 MATCH RESULTS</h3>
@@ -114,8 +122,6 @@ ${formatSchedule(matches?.matches || [])}
 <h3>🏆 CHAMPIONS LEAGUE</h3>
 ${formatSchedule(ucl?.matches || [])}
 `;
-
-    return html;
 }
 
 // ==========================
@@ -123,13 +129,22 @@ ${formatSchedule(ucl?.matches || [])}
 // ==========================
 async function sendTelegramImage(buffer) {
     const form = new FormData();
+
     form.append("chat_id", TELEGRAM_CHAT_ID);
-    form.append("photo", buffer, { filename: "dashboard.png" });
+
+    form.append("photo", buffer, {
+        filename: "dashboard.png",
+        contentType: "image/png"
+    });
 
     await axios.post(
         `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
         form,
-        { headers: form.getHeaders() }
+        {
+            headers: form.getHeaders(),
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+        }
     );
 }
 
@@ -138,14 +153,18 @@ async function sendTelegramImage(buffer) {
 // ==========================
 (async () => {
     try {
+        console.log("🚀 Building dashboard...");
+
         const html = await buildDashboardHTML();
 
+        console.log("🖼 Rendering image...");
         const image = await renderImage(html);
 
+        console.log("📤 Sending to Telegram...");
         await sendTelegramImage(image);
 
-        console.log("✅ IMAGE DASHBOARD SENT");
+        console.log("✅ SUCCESS: Dashboard sent as IMAGE");
     } catch (e) {
-        console.log("❌ ERROR:", e.message);
+        console.log("❌ ERROR:", e.response?.data || e.message);
     }
 })();
