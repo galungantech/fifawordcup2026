@@ -21,16 +21,6 @@ function shorten(text, max = 24) {
     return text.length > max ? text.substring(0, max - 3) + '...' : text;
 }
 
-function formatTime(dateString) {
-    return new Date(dateString).toLocaleString('id-ID', {
-        timeZone: 'Asia/Jakarta',
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
 // SAFE REQUEST
 async function safeGet(url, label) {
     try {
@@ -43,14 +33,14 @@ async function safeGet(url, label) {
 }
 
 // ==========================================
-// DASHBOARD
+// BUILD DASHBOARD
 // ==========================================
 async function buildDashboard() {
 
     let msg = "🏆 *WORLD FOOTBALL DASHBOARD*\n\n";
 
     // ======================================
-    // LIVE / TODAY MATCHES
+    // RECENT / GLOBAL MATCHES
     // ======================================
     const matches = await safeGet(
         'https://api.football-data.org/v4/matches',
@@ -59,14 +49,18 @@ async function buildDashboard() {
 
     msg += "📅 *Recent Matches*\n";
 
-    (matches?.matches || []).slice(0, 5).forEach(m => {
-        msg += `• ${shorten(m.homeTeam?.name)} ${m.score?.fullTime?.home ?? '-'}-${m.score?.fullTime?.away ?? '-'} ${shorten(m.awayTeam?.name)}\n`;
-    });
+    if (matches?.matches?.length) {
+        matches.matches.slice(0, 5).forEach(m => {
+            msg += `• ${shorten(m.homeTeam?.name)} ${m.score?.fullTime?.home ?? '-'}-${m.score?.fullTime?.away ?? '-'} ${shorten(m.awayTeam?.name)}\n`;
+        });
+    } else {
+        msg += "• Tidak ada data match saat ini\n";
+    }
 
     msg += "\n";
 
     // ======================================
-    // CHAMPIONS LEAGUE (proxy world cup style)
+    // CHAMPIONS LEAGUE
     // ======================================
     const cl = await safeGet(
         'https://api.football-data.org/v4/competitions/CL/matches',
@@ -75,9 +69,13 @@ async function buildDashboard() {
 
     msg += "🏆 *Elite Matches (Champions League)*\n";
 
-    (cl?.matches || []).slice(0, 5).forEach(m => {
-        msg += `• ${shorten(m.homeTeam?.name)} vs ${shorten(m.awayTeam?.name)}\n`;
-    });
+    if (cl?.matches?.length) {
+        cl.matches.slice(0, 5).forEach(m => {
+            msg += `• ${shorten(m.homeTeam?.name)} vs ${shorten(m.awayTeam?.name)}\n`;
+        });
+    } else {
+        msg += "• Tidak ada data tersedia\n";
+    }
 
     msg += "\n";
 
@@ -85,15 +83,19 @@ async function buildDashboard() {
     // PREMIER LEAGUE
     // ======================================
     const pl = await safeGet(
-        'https://api.football-data.org/v4/competitions/PL/matches?matchday=11',
+        'https://api.football-data.org/v4/competitions/PL/matches?matchday=1',
         'PL'
     );
 
     msg += "🏴 *Premier League Highlights*\n";
 
-    (pl?.matches || []).slice(0, 5).forEach(m => {
-        msg += `• ${shorten(m.homeTeam?.name)} vs ${shorten(m.awayTeam?.name)}\n`;
-    });
+    if (pl?.matches?.length) {
+        pl.matches.slice(0, 5).forEach(m => {
+            msg += `• ${shorten(m.homeTeam?.name)} vs ${shorten(m.awayTeam?.name)}\n`;
+        });
+    } else {
+        msg += "• Tidak ada data tersedia\n";
+    }
 
     msg += "\n";
 
@@ -105,13 +107,17 @@ async function buildDashboard() {
         'standings'
     );
 
-    const table = standings?.standings?.find(s => s.type === 'TOTAL')?.table || [];
-
     msg += "📊 *Bundesliga Top 5*\n";
 
-    table.slice(0, 5).forEach(t => {
-        msg += `${t.position}. ${shorten(t.team?.name, 18)} (${t.points})\n`;
-    });
+    const table = standings?.standings?.find(s => s.type === 'TOTAL')?.table || [];
+
+    if (table.length) {
+        table.slice(0, 5).forEach(t => {
+            msg += `${t.position}. ${shorten(t.team?.name, 18)} (${t.points})\n`;
+        });
+    } else {
+        msg += "• Tidak ada data standings\n";
+    }
 
     msg += "\n";
 
@@ -125,11 +131,17 @@ async function buildDashboard() {
 
     msg += "⚽ *Serie A Top Scorers*\n";
 
-    (scorers?.scorers || []).slice(0, 5).forEach((s, i) => {
-        msg += `${i + 1}. ${shorten(s.player?.name, 18)} (${s.goals})\n`;
-    });
+    if (scorers?.scorers?.length) {
+        scorers.scorers.slice(0, 5).forEach((s, i) => {
+            msg += `${i + 1}. ${shorten(s.player?.name, 18)} (${s.goals})\n`;
+        });
+    } else {
+        msg += "• Tidak ada data top scorer\n";
+    }
 
+    // ======================================
     // LIMIT TELEGRAM
+    // ======================================
     if (msg.length > 3900) {
         msg = msg.slice(0, 3900) + "\n...(cut)";
     }
@@ -138,17 +150,23 @@ async function buildDashboard() {
 }
 
 // ==========================================
-// TELEGRAM
+// SEND TELEGRAM
 // ==========================================
 async function sendTelegram(text) {
-    await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-        {
-            chat_id: TELEGRAM_CHAT_ID,
-            text,
-            parse_mode: "Markdown"
-        }
-    );
+    try {
+        await axios.post(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+            {
+                chat_id: TELEGRAM_CHAT_ID,
+                text,
+                parse_mode: "Markdown"
+            }
+        );
+
+        console.log("✅ Telegram sent");
+    } catch (err) {
+        console.error("❌ Telegram error:", err.response?.data || err.message);
+    }
 }
 
 // ==========================================
@@ -158,8 +176,7 @@ async function sendTelegram(text) {
     try {
         const dashboard = await buildDashboard();
         await sendTelegram(dashboard);
-        console.log("✅ Dashboard sent");
     } catch (err) {
-        console.error("❌ Fatal:", err.response?.data || err.message);
+        console.error("❌ Fatal error:", err.response?.data || err.message);
     }
 })();
