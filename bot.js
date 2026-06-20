@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { renderHTMLTable } = require("./renderEngine");
 
 // ==========================
 // CONFIG
@@ -10,22 +11,6 @@ const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 const headers = {
     "X-Auth-Token": FOOTBALL_DATA_TOKEN
 };
-
-// ==========================
-// UTILS
-// ==========================
-function pad(str, size) {
-    str = String(str ?? "-");
-    return str.length > size ? str.slice(0, size - 1) + "…" : str + " ".repeat(size - str.length);
-}
-
-function timeWIB(date) {
-    return new Date(date).toLocaleTimeString("id-ID", {
-        timeZone: "Asia/Jakarta",
-        hour: "2-digit",
-        minute: "2-digit"
-    });
-}
 
 // ==========================
 // SAFE FETCH
@@ -41,34 +26,7 @@ async function get(url, label) {
 }
 
 // ==========================
-// TABLE RENDER ENGINE (CORE)
-// ==========================
-function renderTable(headers, rows) {
-    const colWidths = headers.map((h, i) =>
-        Math.max(
-            h.length,
-            ...rows.map(r => String(r[i] ?? "").length)
-        )
-    );
-
-    const formatRow = (row) =>
-        row.map((cell, i) => pad(cell, colWidths[i])).join(" | ");
-
-    const line = colWidths.map(w => "-".repeat(w)).join("-|-");
-
-    let out = "";
-    out += formatRow(headers) + "\n";
-    out += line + "\n";
-
-    rows.forEach(r => {
-        out += formatRow(r) + "\n";
-    });
-
-    return "```\n" + out + "```";
-}
-
-// ==========================
-// MATCH TABLE
+// FORMAT MATCH (HTML VERSION)
 // ==========================
 function formatMatches(matches) {
     const rows = (matches || []).slice(0, 10).map(m => {
@@ -84,34 +42,39 @@ function formatMatches(matches) {
         let group = m.group || "-";
         group = group.replace("GROUP_", "");
 
-        return [status, match, group];
-    });
+        return `<tr><td>${status}</td><td>${match}</td><td>${group}</td></tr>`;
+    }).join("\n");
 
-    return renderTable(
-        ["STATUS", "MATCH", "GRP"],
-        rows
-    );
+    return renderHTMLTable(`
+<tr><th>Status</th><th>Match</th><th>Grp</th></tr>
+${rows}
+`);
 }
 
 // ==========================
-// SCHEDULE TABLE
+// FORMAT SCHEDULE (HTML VERSION)
 // ==========================
 function formatSchedule(matches) {
     const rows = (matches || []).slice(0, 10).map(m => {
-        return [
-            timeWIB(m.utcDate),
-            `${m.homeTeam?.name} vs ${m.awayTeam?.name}`
-        ];
-    });
+        const time = new Date(m.utcDate).toLocaleTimeString("id-ID", {
+            timeZone: "Asia/Jakarta",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
 
-    return renderTable(
-        ["WIB", "MATCH"],
-        rows
-    );
+        const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
+
+        return `<tr><td>${time}</td><td>${match}</td></tr>`;
+    }).join("\n");
+
+    return renderHTMLTable(`
+<tr><th>WIB</th><th>Match</th></tr>
+${rows}
+`);
 }
 
 // ==========================
-// DASHBOARD BUILDER
+// DASHBOARD
 // ==========================
 async function buildDashboard() {
     let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
@@ -124,7 +87,7 @@ async function buildDashboard() {
     msg += "📌 MATCH RESULTS\n";
     msg += formatMatches(matches?.matches || []);
 
-    msg += "\n\n📅 UPCOMING MATCHES\n";
+    msg += "\n📅 UPCOMING MATCHES\n";
     msg += formatSchedule(matches?.matches || []);
 
     const ucl = await get(
@@ -132,7 +95,7 @@ async function buildDashboard() {
         "ucl"
     );
 
-    msg += "\n\n🏆 CHAMPIONS LEAGUE\n";
+    msg += "\n🏆 CHAMPIONS LEAGUE\n";
     msg += formatSchedule(ucl?.matches || []);
 
     if (msg.length > 3900) {
@@ -163,8 +126,8 @@ async function sendTelegram(text) {
     try {
         const dashboard = await buildDashboard();
         await sendTelegram(dashboard);
-        console.log("✅ Sent");
+        console.log("✅ SENT");
     } catch (e) {
-        console.log("❌ Fatal:", e.message);
+        console.log("❌ ERROR:", e.message);
     }
 })();
