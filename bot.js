@@ -30,11 +30,11 @@ function formatTime(utcDate) {
 }
 
 function escapeMarkdownV2(text) {
-    return text.replace(/([\_\*
+    return text.replace(/([_\*
 
 \[\]
 
-\(\)\~\`\>\#\+\-\=\|\{\}\.\!])/g, '\\$1');
+\(\)\~`\>\#\+\-\=\|\{\}\.\!<>])/g, '\\$1');
 }
 
 // ==========================================
