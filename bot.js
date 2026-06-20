@@ -14,7 +14,7 @@ const headers = {
 };
 
 // ==========================
-// SAFE FETCH
+// FETCH SAFE
 // ==========================
 async function get(url, label) {
     try {
@@ -27,27 +27,20 @@ async function get(url, label) {
 }
 
 // ==========================
-// BUILD HTML TABLE
+// TABLE BUILDER
 // ==========================
 function buildTable(headers, rows) {
     let html = `<table><tr>`;
-
-    headers.forEach(h => {
-        html += `<th>${h}</th>`;
-    });
-
+    headers.forEach(h => html += `<th>${h}</th>`);
     html += `</tr>`;
 
     rows.forEach(r => {
         html += `<tr>`;
-        r.forEach(c => {
-            html += `<td>${c}</td>`;
-        });
+        r.forEach(c => html += `<td>${c}</td>`);
         html += `</tr>`;
     });
 
-    html += `</table>`;
-    return html;
+    return html + `</table>`;
 }
 
 // ==========================
@@ -62,23 +55,32 @@ function formatMatches(matches) {
 
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
         const match = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
-        const group = (m.group || "-").replace("GROUP_", "");
+
+        const group = (m.group || "-")
+            .replace("GROUP_", "")
+            .replace("GROUP-", "");
 
         return [status, match, group];
     });
 
-    return buildTable(
-        ["STATUS", "MATCH", "GRP"],
-        rows
-    );
+    return buildTable(["STATUS", "MATCH", "GROUP"], rows);
 }
 
 // ==========================
-// SCHEDULE
+// SCHEDULE (FIXED FORMAT)
 // ==========================
 function formatSchedule(matches) {
     const rows = (matches || []).slice(0, 6).map(m => {
-        const time = new Date(m.utcDate).toLocaleTimeString("id-ID", {
+
+        const dateObj = new Date(m.utcDate);
+
+        const date = dateObj.toLocaleDateString("id-ID", {
+            timeZone: "Asia/Jakarta",
+            day: "2-digit",
+            month: "short"
+        });
+
+        const time = dateObj.toLocaleTimeString("id-ID", {
             timeZone: "Asia/Jakarta",
             hour: "2-digit",
             minute: "2-digit"
@@ -86,29 +88,28 @@ function formatSchedule(matches) {
 
         const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
 
-        return [time, match, m.group || "-"];
+        const group = (m.group || "-")
+            .replace("GROUP_", "")
+            .replace("GROUP-", "");
+
+        const dateTime = `${date} ${time} WIB`;
+
+        return [dateTime, match, group];
     });
 
     return buildTable(
-        ["WIB", "MATCH", "GRP"],
+        ["TANGGAL & WAKTU", "MATCH", "GROUP"],
         rows
     );
 }
 
 // ==========================
-// DASHBOARD HTML
+// HTML DASHBOARD
 // ==========================
 async function buildDashboardHTML() {
 
-    const matches = await get(
-        "https://api.football-data.org/v4/matches",
-        "matches"
-    );
-
-    const ucl = await get(
-        "https://api.football-data.org/v4/competitions/CL/matches",
-        "ucl"
-    );
+    const matches = await get("https://api.football-data.org/v4/matches", "matches");
+    const ucl = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
 
     return `
 <h2>⚽ WORLD FOOTBALL DASHBOARD</h2>
@@ -125,9 +126,34 @@ ${formatSchedule(ucl?.matches || [])}
 }
 
 // ==========================
-// SEND IMAGE TO TELEGRAM
+// LIVE BUTTONS
 // ==========================
-async function sendTelegramImage(buffer) {
+function buildLiveButtons(matches) {
+    const liveMatches = (matches || [])
+        .filter(m => m.status === "IN_PLAY")
+        .slice(0, 5);
+
+    if (liveMatches.length === 0) {
+        return [
+            [{
+                text: "📅 Tidak ada pertandingan LIVE",
+                url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026"
+            }]
+        ];
+    }
+
+    return liveMatches.map(m => ([
+        {
+            text: `🔴 LIVE: ${m.homeTeam?.name} vs ${m.awayTeam?.name}`,
+            url: "https://t.me/KotakBiasa?livestream"
+        }
+    ]));
+}
+
+// ==========================
+// SEND IMAGE
+// ==========================
+async function sendTelegramImage(buffer, matches) {
     const form = new FormData();
 
     form.append("chat_id", TELEGRAM_CHAT_ID);
@@ -136,6 +162,26 @@ async function sendTelegramImage(buffer) {
         filename: "dashboard.png",
         contentType: "image/png"
     });
+
+    form.append("caption", "🏆 WORLD FOOTBALL DASHBOARD");
+
+    form.append("reply_markup", JSON.stringify({
+        inline_keyboard: [
+            ...buildLiveButtons(matches),
+            [
+                {
+                    text: "🏆 Klasemen FIFA",
+                    url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"
+                }
+            ],
+            [
+                {
+                    text: "📰 Berita FIFA",
+                    url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026"
+                }
+            ]
+        ]
+    }));
 
     await axios.post(
         `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
@@ -155,15 +201,17 @@ async function sendTelegramImage(buffer) {
     try {
         console.log("🚀 Building dashboard...");
 
+        const matchesData = await get("https://api.football-data.org/v4/matches", "matches");
+
         const html = await buildDashboardHTML();
 
         console.log("🖼 Rendering image...");
         const image = await renderImage(html);
 
         console.log("📤 Sending to Telegram...");
-        await sendTelegramImage(image);
+        await sendTelegramImage(image, matchesData?.matches || []);
 
-        console.log("✅ SUCCESS: Dashboard sent as IMAGE");
+        console.log("✅ SUCCESS");
     } catch (e) {
         console.log("❌ ERROR:", e.response?.data || e.message);
     }
