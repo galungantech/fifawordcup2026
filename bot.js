@@ -129,17 +129,15 @@ ${formatSchedule(ucl?.matches || [])}
 // LIVE BUTTONS
 // ==========================
 function buildLiveButtons(matches) {
+    const LIVE_STATUS = ["IN_PLAY", "LIVE", "INPROGRESS", "PAUSED"];
+
     const liveMatches = (matches || [])
-        .filter(m => m.status === "IN_PLAY")
+        .filter(m => LIVE_STATUS.includes(m.status))
         .slice(0, 5);
 
+    // ❗ kalau tidak ada LIVE → jangan paksa tombol fallback
     if (liveMatches.length === 0) {
-        return [
-            [{
-                text: "📅 Tidak ada pertandingan LIVE",
-                url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026"
-            }]
-        ];
+        return [];
     }
 
     return liveMatches.map(m => ([
