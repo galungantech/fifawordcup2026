@@ -1,5 +1,6 @@
 const axios = require("axios");
-const { renderHTMLTable } = require("./renderEngine");
+const FormData = require("form-data");
+const { renderImage } = require("./imageRenderer");
 
 // ==========================
 // CONFIG
@@ -13,7 +14,7 @@ const headers = {
 };
 
 // ==========================
-// SAFE FETCH
+// FETCH API
 // ==========================
 async function get(url, label) {
     try {
@@ -26,107 +27,79 @@ async function get(url, label) {
 }
 
 // ==========================
-// FORMAT MATCH (HTML VERSION)
+// BUILD DASHBOARD HTML
 // ==========================
-function formatMatches(matches) {
+function buildDashboardHTML(matches) {
     const rows = (matches || []).slice(0, 10).map(m => {
         let status = m.status;
 
-        if (status === "FINISHED") status = "FT";
-        if (status === "IN_PLAY") status = "LIVE";
+        if (status === "FINISHED") status = `<span class="ft">FT</span>`;
+        if (status === "IN_PLAY") status = `<span class="live">LIVE</span>`;
 
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
 
         const match = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
 
-        let group = m.group || "-";
-        group = group.replace("GROUP_", "");
+        const group = (m.group || "-").replace("GROUP_", "");
 
-        return `<tr><td>${status}</td><td>${match}</td><td>${group}</td></tr>`;
-    }).join("\n");
+        return `
+        <tr>
+            <td>${status}</td>
+            <td>${match}</td>
+            <td>${group}</td>
+        </tr>`;
+    }).join("");
 
-    return renderHTMLTable(`
-<tr><th>Status</th><th>Match</th><th>Grp</th></tr>
-${rows}
-`);
+    return `
+    <h2>🏆 WORLD FOOTBALL DASHBOARD</h2>
+
+    <table>
+        <tr>
+            <th>Status</th>
+            <th>Match</th>
+            <th>Group</th>
+        </tr>
+        ${rows}
+    </table>
+    `;
 }
 
 // ==========================
-// FORMAT SCHEDULE (HTML VERSION)
+// SEND IMAGE TO TELEGRAM
 // ==========================
-function formatSchedule(matches) {
-    const rows = (matches || []).slice(0, 10).map(m => {
-        const time = new Date(m.utcDate).toLocaleTimeString("id-ID", {
-            timeZone: "Asia/Jakarta",
-            hour: "2-digit",
-            minute: "2-digit"
-        });
+async function sendImage(buffer) {
+    const form = new FormData();
+    form.append("chat_id", TELEGRAM_CHAT_ID);
+    form.append("photo", buffer, {
+        filename: "dashboard.png"
+    });
 
-        const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
-
-        return `<tr><td>${time}</td><td>${match}</td></tr>`;
-    }).join("\n");
-
-    return renderHTMLTable(`
-<tr><th>WIB</th><th>Match</th></tr>
-${rows}
-`);
-}
-
-// ==========================
-// DASHBOARD
-// ==========================
-async function buildDashboard() {
-    let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
-
-    const matches = await get(
-        "https://api.football-data.org/v4/matches",
-        "matches"
-    );
-
-    msg += "📌 MATCH RESULTS\n";
-    msg += formatMatches(matches?.matches || []);
-
-    msg += "\n📅 UPCOMING MATCHES\n";
-    msg += formatSchedule(matches?.matches || []);
-
-    const ucl = await get(
-        "https://api.football-data.org/v4/competitions/CL/matches",
-        "ucl"
-    );
-
-    msg += "\n🏆 CHAMPIONS LEAGUE\n";
-    msg += formatSchedule(ucl?.matches || []);
-
-    if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(cut)";
-    }
-
-    return msg;
-}
-
-// ==========================
-// SEND TELEGRAM
-// ==========================
-async function sendTelegram(text) {
     await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
+        form,
         {
-            chat_id: TELEGRAM_CHAT_ID,
-            text,
-            parse_mode: "MarkdownV2"
+            headers: form.getHeaders()
         }
     );
 }
 
 // ==========================
-// RUN
+// RUN BOT
 // ==========================
 (async () => {
     try {
-        const dashboard = await buildDashboard();
-        await sendTelegram(dashboard);
-        console.log("✅ SENT");
+        const matches = await get(
+            "https://api.football-data.org/v4/matches",
+            "matches"
+        );
+
+        const html = buildDashboardHTML(matches?.matches || []);
+
+        const image = await renderImage(html);
+
+        await sendImage(image);
+
+        console.log("✅ Dashboard image sent");
     } catch (e) {
         console.log("❌ ERROR:", e.message);
     }
