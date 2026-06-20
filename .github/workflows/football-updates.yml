@@ -17,13 +17,13 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-node: '20'
+        node-version: '20' # <-- Diperbaiki dari node-node menjadi node-version
 
     - name: Install Dependencies
       run: npm install axios
 
     - name: Execute Bot Script
-          env:
-            TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-            TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          run: node bot.js
+      env: # <-- Indentasi spasi dirapikan agar sejajar
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: node bot.js # <-- Indentasi spasi dirapikan agar sejajar
