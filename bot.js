@@ -1,4 +1,5 @@
 const axios = require("axios");
+const crypto = require("crypto");
 const { renderHTMLTable } = require("./renderEngine");
 
 // ==========================
@@ -6,6 +7,7 @@ const { renderHTMLTable } = require("./renderEngine");
 // ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const MESSAGE_ID = 79;
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
 const headers = {
@@ -13,121 +15,134 @@ const headers = {
 };
 
 // ==========================
-// SAFE FETCH
+// CACHE (ANTI SPAM EDIT)
+// ==========================
+let lastHash = "";
+
+// ==========================
+// FETCH
 // ==========================
 async function get(url, label) {
     try {
         const res = await axios.get(url, { headers });
         return res.data;
     } catch (e) {
-        console.log("❌", label, e.response?.status || e.message);
+        console.log("❌", label, e.message);
         return null;
     }
 }
 
 // ==========================
-// FORMAT MATCH (HTML VERSION)
+// HASH GENERATOR
 // ==========================
-function formatMatches(matches) {
-    const rows = (matches || []).slice(0, 10).map(m => {
-        let status = m.status;
-
-        if (status === "FINISHED") status = "FT";
-        if (status === "IN_PLAY") status = "LIVE";
-
-        const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
-
-        const match = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
-
-        let group = m.group || "-";
-        group = group.replace("GROUP_", "");
-
-        return `<tr><td>${status}</td><td>${match}</td><td>${group}</td></tr>`;
-    }).join("\n");
-
-    return renderHTMLTable(`
-<tr><th>Status</th><th>Match</th><th>Grp</th></tr>
-${rows}
-`);
+function makeHash(text) {
+    return crypto.createHash("md5").update(text).digest("hex");
 }
 
 // ==========================
-// FORMAT SCHEDULE (HTML VERSION)
+// FORMAT MATCH
+// ==========================
+function formatMatches(matches) {
+    return (matches || []).slice(0, 6).map(m => {
+
+        let status = m.status;
+        if (status === "FINISHED") status = "FT";
+        if (status === "IN_PLAY") status = "LIVE";
+
+        const home = m.homeTeam?.name || "-";
+        const away = m.awayTeam?.name || "-";
+
+        const hs = m.score?.fullTime?.home ?? "-";
+        const as = m.score?.fullTime?.away ?? "-";
+
+        return `<tr><td>${status}</td><td>${home} ${hs}-${as} ${away}</td></tr>`;
+    }).join("\n");
+}
+
+// ==========================
+// FORMAT SCHEDULE
 // ==========================
 function formatSchedule(matches) {
-    const rows = (matches || []).slice(0, 10).map(m => {
-        const time = new Date(m.utcDate).toLocaleTimeString("id-ID", {
+    return (matches || []).slice(0, 6).map(m => {
+
+        const d = new Date(m.utcDate);
+
+        const time = d.toLocaleTimeString("id-ID", {
             timeZone: "Asia/Jakarta",
             hour: "2-digit",
             minute: "2-digit"
         });
 
-        const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
-
-        return `<tr><td>${time}</td><td>${match}</td></tr>`;
+        return `<tr><td>${time}</td><td>${m.homeTeam?.name} vs ${m.awayTeam?.name}</td></tr>`;
     }).join("\n");
-
-    return renderHTMLTable(`
-<tr><th>WIB</th><th>Match</th></tr>
-${rows}
-`);
 }
 
 // ==========================
-// DASHBOARD
+// BUILD MESSAGE
 // ==========================
-async function buildDashboard() {
-    let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
+async function buildMessage() {
 
-    const matches = await get(
-        "https://api.football-data.org/v4/matches",
-        "matches"
-    );
+    const matches = await get("https://api.football-data.org/v4/matches", "matches");
+    const ucl = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
 
-    msg += "📌 MATCH RESULTS\n";
-    msg += formatMatches(matches?.matches || []);
+    let msg = `
+🏆 WORLD FOOTBALL DASHBOARD
 
-    msg += "\n📅 UPCOMING MATCHES\n";
-    msg += formatSchedule(matches?.matches || []);
+📌 MATCH RESULTS
+${renderHTMLTable(`<tr><th>Status</th><th>Match</th></tr>${formatMatches(matches?.matches)}`)}
 
-    const ucl = await get(
-        "https://api.football-data.org/v4/competitions/CL/matches",
-        "ucl"
-    );
+📅 UPCOMING
+${renderHTMLTable(`<tr><th>Time</th><th>Match</th></tr>${formatSchedule(matches?.matches)}`)}
 
-    msg += "\n🏆 CHAMPIONS LEAGUE\n";
-    msg += formatSchedule(ucl?.matches || []);
-
-    if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(cut)";
-    }
+🏆 UCL
+${renderHTMLTable(`<tr><th>Time</th><th>Match</th></tr>${formatSchedule(ucl?.matches)}`)}
+`;
 
     return msg;
 }
 
 // ==========================
-// SEND TELEGRAM
+// EDIT MESSAGE (NO SPAM)
 // ==========================
-async function sendTelegram(text) {
+async function editMessage(text) {
+
+    const hash = makeHash(text);
+
+    if (hash === lastHash) {
+        console.log("⏭ No change, skip edit");
+        return;
+    }
+
+    lastHash = hash;
+
     await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
         {
             chat_id: TELEGRAM_CHAT_ID,
+            message_id: MESSAGE_ID,
             text,
-            parse_mode: "MarkdownV2"
+            parse_mode: "HTML",
+            disable_web_page_preview: true
         }
     );
 }
 
 // ==========================
-// RUN
+// RUN LOOP (AUTO REFRESH)
 // ==========================
-(async () => {
-    try {
-        const dashboard = await buildDashboard();
-        await sendTelegram(dashboard);
-        console.log("✅ SENT");
-    } catch (e) {
-        console.log("❌ ERROR:", e.message);
-    }
-})();
+async function run() {
+
+    console.log("🚀 Fetch dashboard...");
+
+    const text = await buildMessage();
+
+    console.log("✏️ Updating message...");
+
+    await editMessage(text);
+}
+
+// ==========================
+// AUTO LOOP (SET INTERVAL)
+// ==========================
+run();
+setInterval(run, 30000); // 🔥 refresh tiap 30 detik
