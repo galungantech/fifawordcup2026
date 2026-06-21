@@ -1,6 +1,7 @@
 const puppeteer = require("puppeteer");
 
 async function renderImage(htmlContent) {
+
     const browser = await puppeteer.launch({
         headless: "new",
         args: ["--no-sandbox", "--disable-setuid-sandbox"]
@@ -9,51 +10,87 @@ async function renderImage(htmlContent) {
     const page = await browser.newPage();
 
     const fullHTML = `
-    <html>
-    <head>
-        <style>
-            body {
-                margin: 0;
-                padding: 20px;
-                background: #0b1220;
-                font-family: Arial, sans-serif;
-                color: white;
-            }
+<html>
+<head>
+<style>
 
-            h2 { color: #facc15; }
+body {
+    margin: 0;
+    padding: 18px;
+    background: #0b1220;
+    font-family: Arial, sans-serif;
+    color: white;
+}
 
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                background: #111827;
-                border-radius: 10px;
-                overflow: hidden;
-            }
+h2 {
+    text-align: center;
+    color: #facc15;
+    margin-bottom: 15px;
+}
 
-            th {
-                background: #1f2937;
-                padding: 10px;
-                text-align: left;
-            }
+.section {
+    margin-bottom: 18px;
+}
 
-            td {
-                padding: 10px;
-                border-top: 1px solid #374151;
-            }
+.card {
+    background: #111827;
+    padding: 10px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border-left: 4px solid #374151;
+}
 
-            tr:nth-child(even) {
-                background: #0f172a;
-            }
+.live {
+    border-left: 4px solid #ef4444;
+}
 
-            .live { color: #ef4444; font-weight: bold; }
-            .ft { color: #22c55e; font-weight: bold; }
-        </style>
-    </head>
-    <body>
-        ${htmlContent}
-    </body>
-    </html>
-    `;
+.ft {
+    border-left: 4px solid #22c55e;
+}
+
+.upcoming {
+    border-left: 4px solid #3b82f6;
+}
+
+.title {
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+.small {
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.badge-live {
+    color: #ef4444;
+    font-weight: bold;
+}
+
+.badge-ft {
+    color: #22c55e;
+    font-weight: bold;
+}
+
+table {
+    width: 100%;
+    margin-top: 5px;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+td {
+    padding: 4px;
+    border-bottom: 1px solid #1f2937;
+}
+
+</style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>
+`;
 
     await page.setContent(fullHTML, { waitUntil: "networkidle0" });
 
