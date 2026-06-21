@@ -1,58 +1,120 @@
 const axios = require("axios");
+const fs = require("fs");
 
 // ==========================
 // CONFIG
 // ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 74; 
+const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
-// 🔥 Ganti dengan URL GitHub Pages Anda sendiri
-const WEB_APP_URL = "https://galungantech.github.io/fifawordcup2026/"; 
+const headers = {
+    "X-Auth-Token": FOOTBALL_DATA_TOKEN
+};
 
 // ==========================
-// KODE COBA KIRIM BARU (RUN ONCE TO GET ID)
+// SAFE FETCH
 // ==========================
-async function sendNewRichMessage() {
-    const text = `🏆 *FIFA World Cup 2026™*
-
-_Piala Dunia 2026 kini telah memasuki fase grup\\! Jangan lewatkan aksi serunya\\._ \\- *Kotak Biasa*
-
-Klik tombol di bawah untuk membuka Live Dashboard, jadwal lengkap, top skor, dan klasemen interaktif langsung di dalam Telegram\\.`;
-
+async function get(url, label) {
     try {
-        const res = await axios.post(
-            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-            {
-                chat_id: TELEGRAM_CHAT_ID,
-                text: text,
-                parse_mode: "MarkdownV2",
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            {
-                                text: "⚽ Buka Dashboard Interaktif",
-                                web_app: {
-                                    url: WEB_APP_URL
-                                }
-                            }
-                        ],
-                        [
-                            {
-                                text: "📺 Tonton Live Streaming",
-                                url: "https://t.me/KotakBiasa?livestream"
-                            }
-                        ]
-                    ]
-                }
-            }
-        );
-        console.log("✅ BERHASIL KIRIM PESAN BARU!");
-        console.log("➡️ ID PESAN BARU ANDA ADALAH:", res.data.result.message_id);
+        const res = await axios.get(url, { headers });
+        return res.data;
     } catch (e) {
-        console.log("❌ ERROR:", e.response?.data || e.message);
-        process.exit(1);
+        console.log("❌", label, e.response?.status || e.message);
+        return null;
     }
 }
 
-// 🔥 Memanggil fungsi yang benar agar tidak memicu ReferenceError
-sendNewRichMessage();
+// ==========================
+// GENERATE HTML FOR RICH_MESSAGE
+// ==========================
+// Fungsi ini menyusun struktur HTML mentah yang akan dibaca oleh render engine Anda
+async function buildHtmlContent() {
+    // 1. Ambil Data Matches
+    const matchesData = await get("https://api.football-data.org/v4/matches", "matches");
+    const matches = matchesData?.matches || [];
+
+    let matchRows = matches.slice(0, 10).map(m => {
+        let status = m.status === "FINISHED" ? "FT" : (m.status === "IN_PLAY" ? "LIVE" : m.status);
+        const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
+        const matchName = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
+        let group = (m.group || "-").replace("GROUP_", "");
+        return `<tr><td>${status}</td><td>${matchName}</td><td>${group}</td></tr>`;
+    }).join("\n");
+
+    // 2. Ambil Data UCL
+    const uclData = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
+    const uclMatches = uclData?.matches || [];
+
+    let uclRows = uclMatches.slice(0, 10).map(m => {
+        const d = new Date(m.utcDate);
+        const dateStr = d.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short" });
+        const timeStr = d.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }).replace(":", ".");
+        return `<tr><td>${dateStr} ${timeStr} WIB</td><td>${m.homeTeam?.name} vs ${m.awayTeam?.name}</td></tr>`;
+    }).join("\n");
+
+    // Gabungkan menjadi satu string HTML utuh
+    return `
+    <h3>📌 MATCH RESULTS</h3>
+    <table>
+        <tr><th>Status</th><th>Match</th><th>Grp</th></tr>
+        ${matchRows}
+    </table>
+    
+    <h3>📅 UPCOMING MATCHES</h3>
+    <table>
+        <tr><th>Tanggal & Waktu</th><th>Match</th></tr>
+        ${uclRows}
+    </table>
+    `.trim();
+}
+
+// ==========================
+// EXECUTE AND SEND RICH PAYLOAD
+// ==========================
+async function run() {
+    console.log("🚀 Menyusun konten HTML untuk rich_message...");
+    const htmlContent = await buildHtmlContent();
+
+    // Membentuk payload sesuai dengan format model yang Anda inginkan
+    const payload = {
+        chat_id: TELEGRAM_CHAT_ID,
+        message_id: parseInt(TELEGRAM_MESSAGE_ID),
+        rich_message: {
+            html: htmlContent
+        },
+        reply_markup: {
+            inline_keyboard: [
+                [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/KotakBiasa?livestream"}],
+                [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
+                [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
+            ]
+        }
+    };
+
+    try {
+        console.log("🚀 Mengirim update rich_message ke Telegram...");
+        const res = await axios.post(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
+            payload,
+            { headers: { "Content-Type": "application/json" } }
+        );
+
+        if (res.data.ok) {
+            console.log("✅ Berhasil! Pesan di channel sudah diperbarui.");
+        } else {
+            console.log("❌ Gagal! Response dari Telegram:", res.data);
+        }
+    } catch (e) {
+        const telegramError = e.response?.data?.description || "";
+        if (telegramError.includes("message is not modified")) {
+            console.log("⚠️ INFO: Konten dashboard belum ada perubahan. Dilewati agar tidak error.");
+        } else {
+            console.log("❌ ERROR:", e.response?.data || e.message);
+            process.exit(1);
+        }
+    }
+}
+
+run();
