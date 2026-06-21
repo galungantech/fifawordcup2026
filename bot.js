@@ -29,20 +29,23 @@ async function get(url, label) {
 // ==========================
 // GENERATE HTML FOR RICH_MESSAGE
 // ==========================
+// ==========================
+// GENERATE HTML FOR RICH_MESSAGE (WITH CSS BORDER)
+// ==========================
 async function buildHtmlContent() {
     // 1. AMBIL DATA MATCH RESULTS (Piala Dunia / Semua Laga Umum)
     const matchesData = await get("https://api.football-data.org/v4/matches", "matches");
     const matches = matchesData?.matches || [];
 
     let matchRows = matches.slice(0, 10).map(m => {
-        let status = m.status === "FINISHED" ? "FT" : (m.status === "IN_PLAY" ? "LIVE" : m.status);
+        let status = m.status === "FINISHED" ? "✅ FT" : (m.status === "IN_PLAY" ? "🔴 LIVE" : m.status);
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
         const matchName = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
         let group = (m.group || "-").replace("GROUP_", "");
-        return `<tr><td>${status}</td><td>${matchName}</td><td>${group}</td></tr>`;
+        return `<tr><td>${status}</td><td>${matchName}</td><td class="text-center">${group}</td></tr>`;
     }).join("\n");
 
-    // 2. AMBIL DATA UPCOMING MATCHES (Piala Dunia / Laga Umum)
+    // 2. AMBIL DATA UPCOMING MATCHES
     let upcomingRows = matches.filter(m => m.status === "TIMED").slice(0, 5).map(m => {
         const d = new Date(m.utcDate);
         const dateStr = d.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short" });
@@ -72,42 +75,84 @@ async function buildHtmlContent() {
     standings.forEach(group => {
         if (group.type !== "TOTAL" || !group.group) return;
 
-        // Tampilkan 4 Grup Teratas agar pesan tetap proporsional
         if (groupCount >= 4) return;
         groupCount++;
 
         const groupName = group.group.replace("GROUP_", "");
         const rows = (group.table || []).slice(0, 4).map(t => {
             const teamName = t.team?.shortName || t.team?.name || "-";
-            return `<tr><td>${t.position}</td><td>${teamName}</td><td>${t.playedGames}</td><td>${t.points}</td></tr>`;
+            return `<tr><td class="text-center">${t.position}</td><td>${teamName}</td><td class="text-center">${t.playedGames}</td><td class="text-center"><b>${t.points}</b></td></tr>`;
         }).join("\n");
 
         standingsHtml += `
         <h4>🏆 GROUP ${groupName}</h4>
-        <table>
-            <tr><th>#</th><th>TEAM</th><th>P</th><th>PTS</th></tr>
+        <table border="1">
+            <tr><th style="width: 10%">#</th><th style="width: 60%">TEAM</th><th style="width: 15%">P</th><th style="width: 15%">PTS</th></tr>
             ${rows}
         </table>`;
     });
     if (!standingsHtml) standingsHtml = "<p>Klasemen belum tersedia</p>";
 
-    // Gabungkan seluruh komponen HTML tabel ke satu string utuh
+    // 🔥 Menyisipkan STYLING CSS internal agar garis tabel dirender oleh engine bot Anda
+    const styleBlock = `
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-family: sans-serif;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid #2f3e4e;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #202b36;
+            color: #8fa1b2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.03);
+        }
+        .text-center {
+            text-align: center;
+        }
+        h3 {
+            margin-top: 20px;
+            margin-bottom: 8px;
+            font-size: 15px;
+            border-bottom: 1px dashed #2f3e4e;
+            padding-bottom: 4px;
+        }
+        h4 {
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+    </style>
+    `;
+
+    // Gabungkan CSS dan Konten Tabel
     return `
+    ${styleBlock}
+    
     <h3>📌 MATCH RESULTS</h3>
-    <table>
-        <tr><th>Status</th><th>Match</th><th>Grp</th></tr>
+    <table border="1">
+        <tr><th style="width: 25%">Status</th><th style="width: 60%">Match</th><th style="width: 15%">Grp</th></tr>
         ${matchRows}
     </table>
     
     <h3>📅 UPCOMING MATCHES</h3>
-    <table>
-        <tr><th>Tanggal & Waktu</th><th>Match</th></tr>
+    <table border="1">
+        <tr><th style="width: 35%">Tanggal & Waktu</th><th style="width: 65%">Match</th></tr>
         ${upcomingRows}
     </table>
 
     <h3>🏆 CHAMPIONS LEAGUE</h3>
-    <table>
-        <tr><th>Tanggal & Waktu</th><th>Match</th></tr>
+    <table border="1">
+        <tr><th style="width: 35%">Tanggal & Waktu</th><th style="width: 65%">Match</th></tr>
         ${uclRows}
     </table>
 
@@ -131,7 +176,7 @@ async function run() {
         },
         reply_markup: {
             inline_keyboard: [
-                [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/KotakBiasa?livestream"}],
+                [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/JvcxUG8HLgwM2Zl?livestream"}],
                 [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
                 [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
             ]
