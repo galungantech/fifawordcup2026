@@ -9,7 +9,7 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 74; 
 
 // 🔥 Masukkan URL hasil link GitHub Pages Anda di sini
-const WEB_APP_URL = "https://username-anda.github.io/nama-repositori/"; 
+const WEB_APP_URL = "https://galungantech.github.io/fifawordcup2026/"; 
 
 // ==========================
 // EDIT TELEGRAM RICH MESSAGE
