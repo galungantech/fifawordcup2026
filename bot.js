@@ -1,12 +1,11 @@
 const axios = require("axios");
-const { renderHTMLTable } = require("./renderEngine");
+const fs = require("fs");
 
 // ==========================
 // CONFIG
 // ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-// 🔥 MASUKKAN ID PESAN YANG INGIN DI-EDIT DI SINI
 const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 83; 
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
@@ -28,191 +27,139 @@ async function get(url, label) {
 }
 
 // ==========================
-// FORMAT MATCH (HTML VERSION)
+// GENERATE HTML FOR RICH_MESSAGE
 // ==========================
-function formatMatches(matches) {
-    const rows = (matches || []).slice(0, 10).map(m => {
-        let status = m.status;
+async function buildHtmlContent() {
+    // 1. AMBIL DATA MATCH RESULTS (Piala Dunia / Semua Laga Umum)
+    const matchesData = await get("https://api.football-data.org/v4/matches", "matches");
+    const matches = matchesData?.matches || [];
 
-        if (status === "FINISHED") status = "FT";
-        if (status === "IN_PLAY") status = "LIVE";
-
+    let matchRows = matches.slice(0, 10).map(m => {
+        let status = m.status === "FINISHED" ? "FT" : (m.status === "IN_PLAY" ? "LIVE" : m.status);
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
-        const match = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
-
-        let group = m.group || "-";
-        group = group.replace("GROUP_", "");
-
-        return `<tr><td>${status}</td><td>${match}</td><td>${group}</td></tr>`;
+        const matchName = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
+        let group = (m.group || "-").replace("GROUP_", "");
+        return `<tr><td>${status}</td><td>${matchName}</td><td>${group}</td></tr>`;
     }).join("\n");
 
-    return renderHTMLTable(`
-<tr><th>Status</th><th>Match</th><th>Grp</th></tr>
-${rows}
-`);
-}
-
-// ==========================
-// FORMAT SCHEDULE (HTML VERSION)
-// ==========================
-function formatSchedule(matches) {
-    const rows = (matches || []).slice(0, 10).map(m => {
+    // 2. AMBIL DATA UPCOMING MATCHES (Piala Dunia / Laga Umum)
+    let upcomingRows = matches.filter(m => m.status === "TIMED").slice(0, 5).map(m => {
         const d = new Date(m.utcDate);
-        
-        // Format Tanggal: "20 Jun"
-        const dateStr = d.toLocaleDateString("id-ID", {
-            timeZone: "Asia/Jakarta",
-            day: "2-digit",
-            month: "short"
-        });
+        const dateStr = d.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short" });
+        const timeStr = d.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }).replace(":", ".");
+        return `<tr><td>${dateStr} ${timeStr} WIB</td><td>${m.homeTeam?.name} vs ${m.awayTeam?.name}</td></tr>`;
+    }).join("\n");
+    if (!upcomingRows) upcomingRows = "<tr><td colspan='2'>Tidak ada jadwal terdekat</td></tr>";
 
-        // Format Waktu: "07.00"
-        const timeStr = d.toLocaleTimeString("id-ID", {
-            timeZone: "Asia/Jakarta",
-            hour: "2-digit",
-            minute: "2-digit"
-        }).replace(":", ".");
+    // 3. AMBIL DATA CHAMPIONS LEAGUE (UCL)
+    const uclData = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
+    const uclMatches = uclData?.matches || [];
 
-        const dateTimeFormatted = `${dateStr} ${timeStr} WIB`;
-        const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
-
-        return `<tr><td>${dateTimeFormatted}</td><td>${match}</td></tr>`;
+    let uclRows = uclMatches.slice(0, 10).map(m => {
+        const d = new Date(m.utcDate);
+        const dateStr = d.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short" });
+        const timeStr = d.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }).replace(":", ".");
+        return `<tr><td>${dateStr} ${timeStr} WIB</td><td>${m.homeTeam?.name} vs ${m.awayTeam?.name}</td></tr>`;
     }).join("\n");
 
-    return renderHTMLTable(`
-<tr><th>Tanggal & Waktu</th><th>Match</th></tr>
-${rows}
-`);
-}
-
-// ==========================
-// FORMAT STANDINGS (HTML VERSION)
-// ==========================
-async function getStandings() {
-    const data = await get(
-        "https://api.football-data.org/v4/competitions/WC/standings",
-        "standings"
-    );
-    return data?.standings || [];
-}
-
-function formatStandings(standings) {
-    if (!standings || !standings.length) return "\nKlasemen belum tersedia\n";
-
-    let html = "";
-    let count = 0;
+    // 4. AMBIL DATA KLASEMEN PIALA DUNIA (WC Standings)
+    const standingsData = await get("https://api.football-data.org/v4/competitions/WC/standings", "standings");
+    const standings = standingsData?.standings || [];
+    
+    let standingsHtml = "";
+    let groupCount = 0;
 
     standings.forEach(group => {
         if (group.type !== "TOTAL" || !group.group) return;
 
-        if (count >= 4) return;
-        count++;
+        // Tampilkan 4 Grup Teratas agar pesan tetap proporsional
+        if (groupCount >= 4) return;
+        groupCount++;
 
         const groupName = group.group.replace("GROUP_", "");
-
         const rows = (group.table || []).slice(0, 4).map(t => {
             const teamName = t.team?.shortName || t.team?.name || "-";
             return `<tr><td>${t.position}</td><td>${teamName}</td><td>${t.playedGames}</td><td>${t.points}</td></tr>`;
         }).join("\n");
 
-        const tableHtml = renderHTMLTable(`
-<tr><th>#</th><th>TEAM</th><th>P</th><th>PTS</th></tr>
-${rows}
-`);
-        
-        html += `\n🏆 GROUP ${groupName}\n${tableHtml}`;
+        standingsHtml += `
+        <h4>🏆 GROUP ${groupName}</h4>
+        <table>
+            <tr><th>#</th><th>TEAM</th><th>P</th><th>PTS</th></tr>
+            ${rows}
+        </table>`;
     });
+    if (!standingsHtml) standingsHtml = "<p>Klasemen belum tersedia</p>";
 
-    return html;
+    // Gabungkan seluruh komponen HTML tabel ke satu string utuh
+    return `
+    <h3>📌 MATCH RESULTS</h3>
+    <table>
+        <tr><th>Status</th><th>Match</th><th>Grp</th></tr>
+        ${matchRows}
+    </table>
+    
+    <h3>📅 UPCOMING MATCHES</h3>
+    <table>
+        <tr><th>Tanggal & Waktu</th><th>Match</th></tr>
+        ${upcomingRows}
+    </table>
+
+    <h3>🏆 CHAMPIONS LEAGUE</h3>
+    <table>
+        <tr><th>Tanggal & Waktu</th><th>Match</th></tr>
+        ${uclRows}
+    </table>
+
+    <h3>📊 KLASEMEN PIALA DUNIA</h3>
+    ${standingsHtml}
+    `.trim();
 }
 
 // ==========================
-// DASHBOARD
+// EXECUTE AND SEND RICH PAYLOAD
 // ==========================
-async function buildDashboard() {
-    let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
+async function run() {
+    console.log("🚀 Menyusun konten HTML untuk rich_message...");
+    const htmlContent = await buildHtmlContent();
 
-    const matches = await get(
-        "https://api.football-data.org/v4/matches",
-        "matches"
-    );
-
-    msg += "📌 MATCH RESULTS\n";
-    msg += formatMatches(matches?.matches || []);
-
-    msg += "\n📅 UPCOMING MATCHES\n";
-    msg += formatSchedule(matches?.matches || []);
-
-    const ucl = await get(
-        "https://api.football-data.org/v4/competitions/CL/matches",
-        "ucl"
-    );
-
-    msg += "\n🏆 CHAMPIONS LEAGUE\n";
-    msg += formatSchedule(ucl?.matches || []);
-
-    msg += "\n📊 KLASEMEN";
-    const standingsData = await getStandings();
-    msg += formatStandings(standingsData);
-
-    if (msg.length > 3900) {
-        msg = msg.slice(0, 3900) + "\n...(cut)";
-    }
-
-    return msg;
-}
-
-// ==========================
-// EDIT TELEGRAM MESSAGE
-// ==========================
-async function updateTelegramMessage(text) {
-    // Escape karakter khusus MarkdownV2 agar tidak memicu error parsing
-    const escapedText = text
-        .replace(/-/g, "\\-")
-        .replace(/\./g, "\\.")
-        .replace(/\!/g, "\\!");
-
-    // Menggunakan endpoint editMessageText, bukan sendMessage lagi
-    await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
-        {
-            chat_id: TELEGRAM_CHAT_ID,
-            message_id: TELEGRAM_MESSAGE_ID, // Parameter wajib untuk tahu pesan mana yang di-edit
-            text: escapedText,
-            parse_mode: "MarkdownV2",
-            reply_markup: {
-                inline_keyboard: [
-                    [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/JvcxUG8HLgwM2Zl?livestream"}],
-                    [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
-                    [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
-                ]
-            }
+    const payload = {
+        chat_id: TELEGRAM_CHAT_ID,
+        message_id: parseInt(TELEGRAM_MESSAGE_ID),
+        rich_message: {
+            html: htmlContent
+        },
+        reply_markup: {
+            inline_keyboard: [
+                [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/KotakBiasa?livestream"}],
+                [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
+                [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
+            ]
         }
-    );
-}
+    };
 
-// ==========================
-// RUN
-// ==========================
-// ==========================
-// RUN
-// ==========================
-(async () => {
     try {
-        const dashboard = await buildDashboard();
-        await updateTelegramMessage(dashboard);
-        console.log("✅ MESSAGE UPDATED SUCCESSFULLY");
+        console.log("🚀 Mengirim update rich_message ke Telegram...");
+        const res = await axios.post(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
+            payload,
+            { headers: { "Content-Type": "application/json" } }
+        );
+
+        if (res.data.ok) {
+            console.log("✅ Berhasil! Pesan di channel sudah diperbarui.");
+        } else {
+            console.log("❌ Gagal! Response dari Telegram:", res.data);
+        }
     } catch (e) {
-        // Ambil pesan error dari response Telegram jika ada
         const telegramError = e.response?.data?.description || "";
-        
-        // Cek jika errornya hanya karena kontennya sama (bukan error script rusak)
         if (telegramError.includes("message is not modified")) {
             console.log("⚠️ INFO: Konten dashboard belum ada perubahan. Dilewati agar tidak error.");
         } else {
-            // Jika error disebabkan hal lain (Token salah, API down, dll), tetap tampilkan error asli
             console.log("❌ ERROR:", e.response?.data || e.message);
-            process.exit(1); // Tetap gagalkan workflow jika errornya fatal
+            process.exit(1);
         }
     }
-})();
+}
+
+run();
