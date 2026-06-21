@@ -1,6 +1,4 @@
 const axios = require("axios");
-const FormData = require("form-data");
-const { renderImage } = require("./imageRenderer");
 
 // ==========================
 // CONFIG
@@ -22,126 +20,84 @@ async function get(url, label) {
         const res = await axios.get(url, { headers });
         return res.data;
     } catch (e) {
-        console.log("❌", label, e.response?.status || e.message);
+        console.log("❌", label, e.message);
         return null;
     }
 }
 
 // ==========================
-// TABLE BUILDER
-// ==========================
-function buildTable(headers, rows) {
-    let html = `<table><tr>`;
-    headers.forEach(h => html += `<th>${h}</th>`);
-    html += `</tr>`;
-
-    rows.forEach(r => {
-        html += `<tr>`;
-        r.forEach(c => html += `<td>${c}</td>`);
-        html += `</tr>`;
-    });
-
-    return html + `</table>`;
-}
-
-// ==========================
-// MATCHES
+// FORMAT MATCH
 // ==========================
 function formatMatches(matches) {
-    const rows = (matches || []).slice(0, 4).map(m => {
+    return (matches || [])
+        .slice(0, 4)
+        .map(m => {
+            const home = m.homeTeam?.name;
+            const away = m.awayTeam?.name;
+            const hs = m.score?.fullTime?.home ?? "-";
+            const as = m.score?.fullTime?.away ?? "-";
 
-        let status = m.status;
-        if (status === "FINISHED") status = "FT";
-        if (status === "IN_PLAY") status = "LIVE";
+            let status = m.status;
+            if (status === "FINISHED") status = "FT";
+            if (status === "IN_PLAY") status = "LIVE";
 
-        const home = m.homeTeam?.name || "-";
-        const away = m.awayTeam?.name || "-";
-
-        const homeScore = m.score?.fullTime?.home ?? "-";
-        const awayScore = m.score?.fullTime?.away ?? "-";
-
-        const match = `${home} ${homeScore} vs ${awayScore} ${away}`;
-
-        const group = (m.group || "-").replace(/^GROUP_/, "");
-
-        return [status, match, group];
-    });
-
-    return buildTable(["STATUS", "MATCH", "GROUP"], rows);
+            return `• ${status} | ${home} ${hs}-${as} ${away}`;
+        })
+        .join("\n");
 }
 
 // ==========================
-// SCHEDULE
+// FORMAT SCHEDULE
 // ==========================
 function formatSchedule(matches) {
-    const rows = (matches || []).slice(0, 4).map(m => {
+    return (matches || [])
+        .slice(0, 4)
+        .map(m => {
+            const d = new Date(m.utcDate);
 
-        const d = new Date(m.utcDate);
+            const date = d.toLocaleDateString("id-ID", {
+                timeZone: "Asia/Jakarta",
+                day: "2-digit",
+                month: "short"
+            });
 
-        const date = d.toLocaleDateString("id-ID", {
-            timeZone: "Asia/Jakarta",
-            day: "2-digit",
-            month: "short"
-        });
+            const time = d.toLocaleTimeString("id-ID", {
+                timeZone: "Asia/Jakarta",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
 
-        const time = d.toLocaleTimeString("id-ID", {
-            timeZone: "Asia/Jakarta",
-            hour: "2-digit",
-            minute: "2-digit"
-        });
-
-        const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
-        const group = (m.group || "-").replace(/^GROUP_/, "");
-
-        return [`${date} ${time} WIB`, match, group];
-    });
-
-    return buildTable(["TANGGAL & WAKTU", "MATCH", "GROUP"], rows);
+            return `• ${date} ${time} | ${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
+        })
+        .join("\n");
 }
 
 // ==========================
-// STANDINGS
+// FORMAT STANDINGS
 // ==========================
-async function getStandings() {
-    const data = await get(
-        "https://api.football-data.org/v4/competitions/WC/standings",
-        "standings"
-    );
-    return data?.standings || [];
-}
-
 function formatStandings(standings) {
-    if (!standings.length) return "<p>Standings belum tersedia</p>";
-
-    let html = "";
+    let text = "";
     let count = 0;
 
-    standings.forEach(group => {
-
-        if (group.type !== "TOTAL") return;
-        if (!group.group) return;
-
-        // 🔥 LIMIT 4 GROUP SAJA
+    (standings || []).forEach(g => {
+        if (g.type !== "TOTAL") return;
+        if (!g.group) return;
         if (count >= 4) return;
+
         count++;
 
-        const groupName = group.group.replace(/^GROUP_/, "");
+        const groupName = g.group.replace("GROUP_", "");
 
-        const rows = (group.table || []).slice(0, 4).map(t => [
-            t.position,
-            t.team?.name,
-            t.playedGames,
-            t.points
-        ]);
+        text += `\n🏆 GROUP ${groupName}\n`;
 
-        html += `
-<h3>🏆 GROUP ${groupName}</h3>
-${buildTable(["#", "TEAM", "P", "PTS"], rows)}
-<br/>
-`;
+        text += g.table.slice(0, 4).map(t =>
+            `• ${t.position}. ${t.team?.name} (${t.points} pts)`
+        ).join("\n");
+
+        text += "\n";
     });
 
-    return html;
+    return text;
 }
 
 // ==========================
@@ -149,25 +105,23 @@ ${buildTable(["#", "TEAM", "P", "PTS"], rows)}
 // ==========================
 function buildLiveButtons(matches) {
 
-    const live = (matches || []).filter(m =>
-        ["IN_PLAY", "LIVE", "PAUSED"].includes(m.status)
-    ).slice(0, 4);
+    const live = (matches || [])
+        .filter(m => ["IN_PLAY", "LIVE", "PAUSED"].includes(m.status))
+        .slice(0, 3);
 
     const buttons = [];
 
-    if (live.length > 0) {
-        live.forEach(m => {
-            buttons.push([{
-                text: `🔴 LIVE: ${m.homeTeam?.name} vs ${m.awayTeam?.name}`,
-                url: "https://t.me/+JvcxUG8-HLgwM2Zl"
-            }]);
-        });
-    }
+    live.forEach(m => {
+        buttons.push([{
+            text: `🔴 LIVE: ${m.homeTeam?.name}`,
+            url: "https://t.me/KotakBiasa?livestream"
+        }]);
+    });
 
     buttons.push([
         {
-            text: "📺 Tonton Live Streaming",
-            url: "https://t.me/+JvcxUG8-HLgwM2Zl"
+            text: "📺 Live Streaming",
+            url: "https://t.me/KotakBiasa?livestream"
         }
     ]);
 
@@ -175,61 +129,43 @@ function buildLiveButtons(matches) {
 }
 
 // ==========================
-// DASHBOARD HTML
+// BUILD TEXT DASHBOARD
 // ==========================
-async function buildDashboardHTML() {
+async function buildDashboard() {
 
     const matches = await get("https://api.football-data.org/v4/matches", "matches");
     const ucl = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
-    const standings = await getStandings();
+    const standings = await get("https://api.football-data.org/v4/competitions/WC/standings", "standings");
 
-    return `
-<h2>⚽ WORLD FOOTBALL DASHBOARD</h2>
+    let text = `🏆 WORLD FOOTBALL DASHBOARD\n\n`;
 
-<h3>📌 MATCH RESULTS</h3>
-${formatMatches(matches?.matches || [])}
+    text += `📌 MATCH RESULTS\n${formatMatches(matches?.matches)}\n\n`;
 
-<h3>📅 UPCOMING MATCHES</h3>
-${formatSchedule(matches?.matches || [])}
+    text += `📅 UPCOMING\n${formatSchedule(matches?.matches)}\n\n`;
 
-<h3>🏆 UCL</h3>
-${formatSchedule(ucl?.matches || [])}
+    text += `🏆 UCL\n${formatSchedule(ucl?.matches)}\n\n`;
 
-<h3>📊 KLASEMEN</h3>
-${formatStandings(standings)}
-`;
+    text += `📊 STANDINGS\n${formatStandings(standings?.standings)}\n`;
+
+    return { text, matches: matches?.matches || [] };
 }
 
 // ==========================
-// EDIT MESSAGE MEDIA
+// EDIT MESSAGE TEXT
 // ==========================
-async function editMessage(imageBuffer, caption, buttons) {
-
-    const form = new FormData();
-
-    form.append("chat_id", TELEGRAM_CHAT_ID);
-    form.append("message_id", MESSAGE_ID);
-
-    form.append("media", JSON.stringify({
-        type: "photo",
-        media: "attach://photo",
-        caption,
-        parse_mode: "HTML"
-    }));
-
-    form.append("photo", imageBuffer, {
-        filename: "dashboard.png",
-        contentType: "image/png"
-    });
-
-    form.append("reply_markup", JSON.stringify({
-        inline_keyboard: buttons
-    }));
+async function editMessage(text, buttons) {
 
     await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageMedia`,
-        form,
-        { headers: form.getHeaders() }
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
+        {
+            chat_id: TELEGRAM_CHAT_ID,
+            message_id: MESSAGE_ID,
+            text: text.slice(0, 3900),
+            parse_mode: "HTML",
+            reply_markup: {
+                inline_keyboard: buttons
+            }
+        }
     );
 }
 
@@ -240,26 +176,14 @@ async function editMessage(imageBuffer, caption, buttons) {
     try {
         console.log("🚀 Fetch data...");
 
-        const matchesData = await get("https://api.football-data.org/v4/matches", "matches");
+        const { text, matches } = await buildDashboard();
 
-        console.log("🖼 Render image...");
-        const html = await buildDashboardHTML();
-        const image = await renderImage(html);
-
-        const buttons = [
-            ...buildLiveButtons(matchesData?.matches || []),
-            [
-                { text: "🏆 Klasemen FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings" }
-            ],
-            [
-                { text: "📰 Berita FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026" }
-            ]
-        ];
+        const buttons = buildLiveButtons(matches);
 
         console.log("✏️ Editing message...");
-        await editMessage(image, "🏆 WORLD FOOTBALL DASHBOARD", buttons);
+        await editMessage(text, buttons);
 
-        console.log("✅ DONE");
+        console.log("✅ DONE (TEXT MODE, NO IMAGE)");
     } catch (e) {
         console.log("❌ ERROR:", e.response?.data || e.message);
     }
