@@ -30,10 +30,10 @@ async function get(url, label) {
 // GENERATE HTML FOR RICH_MESSAGE
 // ==========================
 // ==========================
-// GENERATE HTML FOR RICH_MESSAGE (WITH CSS BORDER)
+// GENERATE HTML FOR RICH_MESSAGE (WITH COLLAPSIBLE ACCORDION)
 // ==========================
 async function buildHtmlContent() {
-    // 1. AMBIL DATA MATCH RESULTS (Piala Dunia / Semua Laga Umum)
+    // 1. AMBIL DATA MATCH RESULTS
     const matchesData = await get("https://api.football-data.org/v4/matches", "matches");
     const matches = matchesData?.matches || [];
 
@@ -42,7 +42,7 @@ async function buildHtmlContent() {
         const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
         const matchName = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
         let group = (m.group || "-").replace("GROUP_", "");
-        return `<tr><td>${status}</td><td>${matchName}</td><td class="text-center">${group}</td></tr>`;
+        return `<tr><td>${status}</td><td>${matchName}</td><td>${group}</td></tr>`;
     }).join("\n");
 
     // 2. AMBIL DATA UPCOMING MATCHES
@@ -65,23 +65,20 @@ async function buildHtmlContent() {
         return `<tr><td>${dateStr} ${timeStr} WIB</td><td>${m.homeTeam?.name} vs ${m.awayTeam?.name}</td></tr>`;
     }).join("\n");
 
-    // 4. AMBIL DATA KLASEMEN PIALA DUNIA (WC Standings)
+    // 4. AMBIL DATA KLASEMEN PIALA DUNIA (Semua Grup A-H)
     const standingsData = await get("https://api.football-data.org/v4/competitions/WC/standings", "standings");
     const standings = standingsData?.standings || [];
     
     let standingsHtml = "";
-    let groupCount = 0;
 
     standings.forEach(group => {
         if (group.type !== "TOTAL" || !group.group) return;
 
-        if (groupCount >= 4) return;
-        groupCount++;
-
+        // 🔥 Pembatas groupCount >= 4 sudah dihapus agar semua grup (A sampai H) keluar otomatis
         const groupName = group.group.replace("GROUP_", "");
         const rows = (group.table || []).slice(0, 4).map(t => {
             const teamName = t.team?.shortName || t.team?.name || "-";
-            return `<tr><td class="text-center">${t.position}</td><td>${teamName}</td><td class="text-center">${t.playedGames}</td><td class="text-center"><b>${t.points}</b></td></tr>`;
+            return `<tr><td>${t.position}</td><td>${teamName}</td><td>${t.playedGames}</td><td><b>${t.points}</b></td></tr>`;
         }).join("\n");
 
         standingsHtml += `
@@ -93,7 +90,7 @@ async function buildHtmlContent() {
     });
     if (!standingsHtml) standingsHtml = "<p>Klasemen belum tersedia</p>";
 
-    // 🔥 Menyisipkan STYLING CSS internal agar garis tabel dirender oleh engine bot Anda
+    // Styling dasar CSS agar tabel rapi dan rata tengah
     const styleBlock = `
     <style>
         table {
@@ -106,18 +103,22 @@ async function buildHtmlContent() {
         th, td {
             border: 1px solid #2f3e4e;
             padding: 8px;
-            text-align: left;
+            text-align: center;
+            vertical-align: middle;
         }
         th {
             background-color: #202b36;
             color: #8fa1b2;
             font-weight: bold;
         }
-        tr:nth-child(even) {
-            background-color: rgba(255, 255, 255, 0.03);
-        }
-        .text-center {
-            text-align: center;
+        summary {
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 15px;
+            margin-bottom: 8px;
+            padding: 4px;
+            outline: none;
         }
         h3 {
             margin-top: 20px;
@@ -134,7 +135,7 @@ async function buildHtmlContent() {
     </style>
     `;
 
-    // Gabungkan CSS dan Konten Tabel
+    // 🔥 Menggunakan tag <details> dan <summary> agar memunculkan panah collapse bawaan engine
     return `
     ${styleBlock}
     
@@ -144,20 +145,26 @@ async function buildHtmlContent() {
         ${matchRows}
     </table>
     
-    <h3>📅 UPCOMING MATCHES</h3>
-    <table border="1">
-        <tr><th style="width: 35%">Tanggal & Waktu</th><th style="width: 65%">Match</th></tr>
-        ${upcomingRows}
-    </table>
+    <details>
+        <summary>📅 Jadwal Besok (Malam & Esok Pagi)</summary>
+        <table border="1">
+            <tr><th style="width: 35%">Tanggal & Waktu</th><th style="width: 65%">Match</th></tr>
+            ${upcomingRows}
+        </table>
+    </details>
 
-    <h3>🏆 CHAMPIONS LEAGUE</h3>
-    <table border="1">
-        <tr><th style="width: 35%">Tanggal & Waktu</th><th style="width: 65%">Match</th></tr>
-        ${uclRows}
-    </table>
+    <details>
+        <summary>🏆 Champions League</summary>
+        <table border="1">
+            <tr><th style="width: 35%">Tanggal & Waktu</th><th style="width: 65%">Match</th></tr>
+            ${uclRows}
+        </table>
+    </details>
 
-    <h3>📊 KLASEMEN PIALA DUNIA</h3>
-    ${standingsHtml}
+    <details>
+        <summary>📊 Klasemen Semua Grup (A - H)</summary>
+        ${standingsHtml}
+    </details>
     `.trim();
 }
 
