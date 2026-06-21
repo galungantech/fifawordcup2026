@@ -6,8 +6,9 @@ const { renderHTMLTable } = require("./renderEngine");
 // ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// 🔥 MASUKKAN ID PESAN YANG INGIN DI-EDIT DI SINI
+const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 74; 
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
-const MESSAGE_ID = 83; // ID pesan pertama
 
 const headers = {
     "X-Auth-Token": FOOTBALL_DATA_TOKEN
@@ -104,7 +105,6 @@ function formatStandings(standings) {
     standings.forEach(group => {
         if (group.type !== "TOTAL" || !group.group) return;
 
-        // Batasi hanya menampilkan 4 grup pertama agar tidak over-character
         if (count >= 4) return;
         count++;
 
@@ -151,7 +151,6 @@ async function buildDashboard() {
     msg += "\n🏆 CHAMPIONS LEAGUE\n";
     msg += formatSchedule(ucl?.matches || []);
 
-    // Tambahan info Klasemen
     msg += "\n📊 KLASEMEN";
     const standingsData = await getStandings();
     msg += formatStandings(standingsData);
@@ -164,27 +163,28 @@ async function buildDashboard() {
 }
 
 // ==========================
-// SEND TELEGRAM
+// EDIT TELEGRAM MESSAGE
 // ==========================
-async function sendTelegram(text) {
-
+async function updateTelegramMessage(text) {
+    // Escape karakter khusus MarkdownV2 agar tidak memicu error parsing
     const escapedText = text
         .replace(/-/g, "\\-")
         .replace(/\./g, "\\.")
         .replace(/\!/g, "\\!");
 
+    // Menggunakan endpoint editMessageText, bukan sendMessage lagi
     await axios.post(
         `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
         {
             chat_id: TELEGRAM_CHAT_ID,
-            message_id: MESSAGE_ID,
+            message_id: TELEGRAM_MESSAGE_ID, // Parameter wajib untuk tahu pesan mana yang di-edit
             text: escapedText,
             parse_mode: "MarkdownV2",
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: "🔴 Tonton Live Streaming", url: "https://t.me/KotakBiasa?livestream" }],
-                    [{ text: "🏆 Klasemen Lengkap FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings" }],
-                    [{ text: "📰 Berita Terbaru FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026" }]
+                    [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/KotakBiasa?livestream"}],
+                    [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
+                    [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
                 ]
             }
         }
@@ -197,8 +197,8 @@ async function sendTelegram(text) {
 (async () => {
     try {
         const dashboard = await buildDashboard();
-        await sendTelegram(dashboard);
-        console.log("✅ SENT");
+        await updateTelegramMessage(dashboard);
+        console.log("✅ MESSAGE UPDATED SUCCESSFULLY");
     } catch (e) {
         console.log("❌ ERROR:", e.response?.data || e.message);
     }
