@@ -26,28 +26,31 @@ async function get(url, label) {
 }
 
 // ==========================
-// TABLE BUILDER
+// TABLE BUILDER (TEXT-BASED MONOSPACE)
 // ==========================
-function buildTable(headers, rows) {
-    let html = `<tr>`;
-    headers.forEach(h => html += `<th>${h}</th>`);
-    html += `</tr>`;
+function buildTable(headers, rows, widths) {
+    // 1. Buat Header
+    let tableText = headers.map((h, i) => h.padEnd(widths[i])).join(" | ") + "\n";
+    
+    // 2. Buat Garis Pembatas (---++---)
+    let separator = widths.map(w => "-".repeat(w)).join("-+-");
+    tableText += separator + "\n";
 
+    // 3. Buat Baris Data
     rows.forEach(r => {
-        html += `<tr>`;
-        r.forEach(c => html += `<td>${c}</td>`);
-        html += `</tr>`;
+        tableText += r.map((c, i) => String(c).padEnd(widths[i])).join(" | ") + "\n";
     });
 
-    // Menggunakan renderHTMLTable dari renderEngine seperti kode pertama Anda
-    return renderHTMLTable(html);
+    // Proses lewat renderEngine jika diperlukan, lalu BUNGKUS dengan <pre> agar muncul kotak "copy" di Telegram
+    const processedHtml = renderHTMLTable(tableText.trim());
+    return `<pre>${processedHtml}</pre>`;
 }
 
 // ==========================
 // MATCHES
 // ==========================
 function formatMatches(matches) {
-    const rows = (matches || []).slice(0, 4).map(m => {
+    const rows = (matches || []).slice(0, 5).map(m => {
         let status = m.status;
         if (status === "FINISHED") status = "FT";
         if (status === "IN_PLAY") status = "LIVE";
@@ -58,40 +61,38 @@ function formatMatches(matches) {
         const homeScore = m.score?.fullTime?.home ?? "-";
         const awayScore = m.score?.fullTime?.away ?? "-";
 
-        const match = `${home} ${homeScore}-${awayScore} ${away}`;
+        // Format skor: jika belum main tampilkan ---, jika sudah tampilkan angka 0-0
+        const scoreStr = (m.score?.fullTime?.home !== null) ? `${homeScore}-${awayScore}` : "---";
+        const match = `${home} ${scoreStr} ${away}`;
         const group = (m.group || "-").replace(/^GROUP_/, "");
 
         return [status, match, group];
     });
 
-    return buildTable(["Status", "Match", "Grp"], rows);
+    // Tentukan lebar kolom agar sejajar rapi (Status, Match, Grp)
+    return buildTable(["Status", "Match", "Grp"], rows, [6, 30, 3]);
 }
 
 // ==========================
 // SCHEDULE
 // ==========================
 function formatSchedule(matches) {
-    const rows = (matches || []).slice(0, 4).map(m => {
+    const rows = (matches || []).slice(0, 5).map(m => {
         const d = new Date(m.utcDate);
-
-        const date = d.toLocaleDateString("id-ID", {
-            timeZone: "Asia/Jakarta",
-            day: "2-digit",
-            month: "short"
-        });
 
         const time = d.toLocaleTimeString("id-ID", {
             timeZone: "Asia/Jakarta",
             hour: "2-digit",
             minute: "2-digit"
-        });
+        }).replace(".", "."); // Memastikan format jam menggunakan titik (contoh: 07.00)
 
         const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
 
-        return [`${date} ${time}`, match];
+        return [time, match];
     });
 
-    return buildTable(["WIB", "Match"], rows);
+    // Tentukan lebar kolom agar sejajar rapi (WIB, Match)
+    return buildTable(["WIB", "Match"], rows, [5, 30]);
 }
 
 // ==========================
@@ -115,7 +116,6 @@ function formatStandings(standings) {
         if (group.type !== "TOTAL") return;
         if (!group.group) return;
 
-        // 🔥 LIMIT 4 GROUP SAJA
         if (count >= 4) return;
         count++;
 
@@ -128,8 +128,9 @@ function formatStandings(standings) {
             t.points
         ]);
 
-        html += `<b>🏆 GROUP ${groupName}</b>\n`;
-        html += buildTable(["#", "TEAM", "P", "PTS"], rows);
+        html += `🏆 GROUP ${groupName}\n`;
+        // Tentukan lebar kolom untuk Klasemen (#, TEAM, P, PTS)
+        html += buildTable(["#", "TEAM", "P", "PTS"], rows, [2, 15, 2, 3]);
         html += "\n";
     });
 
@@ -173,21 +174,21 @@ async function buildDashboard() {
     const ucl = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
     const standings = await getStandings();
 
-    let msg = "<b>🏆 WORLD FOOTBALL DASHBOARD</b>\n\n";
+    let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
 
-    msg += "<b>📌 MATCH RESULTS</b>\n";
+    msg += "📌 MATCH RESULTS\n";
     msg += formatMatches(matches?.matches || []);
     msg += "\n";
 
-    msg += "<b>📅 UPCOMING MATCHES</b>\n";
+    msg += "📅 UPCOMING MATCHES\n";
     msg += formatSchedule(matches?.matches || []);
     msg += "\n";
 
-    msg += "<b>🏆 CHAMPIONS LEAGUE</b>\n";
+    msg += "🏆 CHAMPIONS LEAGUE\n";
     msg += formatSchedule(ucl?.matches || []);
     msg += "\n";
 
-    msg += "<b>📊 KLASEMEN</b>\n";
+    msg += "📊 KLASEMEN\n";
     msg += formatStandings(standings);
 
     if (msg.length > 3900) {
@@ -209,7 +210,7 @@ async function sendTelegram(dashboardData) {
         {
             chat_id: TELEGRAM_CHAT_ID,
             text: dashboardData.text,
-            parse_mode: "HTML", // Diubah ke HTML agar tag <table> dari renderEngine terbaca
+            parse_mode: "HTML", // Wajib HTML agar tag <pre> dieksekusi sebagai monospace kotak
             reply_markup: {
                 inline_keyboard: dashboardData.buttons
             }
