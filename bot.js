@@ -15,10 +15,9 @@ const WEB_APP_URL = "https://galungantech.github.io/fifawordcup2026/";
 // EDIT TELEGRAM RICH MESSAGE
 // ==========================
 // ==========================
-// EDIT TELEGRAM RICH MESSAGE
+// KODE COBA KIRIM BARU (RUN ONCE TO GET ID)
 // ==========================
-async function updateTelegramMessage() {
-    // 🔥 Semua karakter khusus (!, -, .) sudah di-escape dengan \\
+async function sendNewRichMessage() {
     const text = `🏆 *FIFA World Cup 2026™*
 
 _Piala Dunia 2026 kini telah memasuki fase grup\\! Jangan lewatkan aksi serunya\\._ \\- *Kotak Biasa*
@@ -26,11 +25,11 @@ _Piala Dunia 2026 kini telah memasuki fase grup\\! Jangan lewatkan aksi serunya\
 Klik tombol di bawah untuk membuka Live Dashboard, jadwal lengkap, top skor, dan klasemen interaktif langsung di dalam Telegram\\.`;
 
     try {
-        await axios.post(
-            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
+        // 🔥 Menggunakan sendMessage terlebih dahulu untuk mendaftarkan struktur tipe tombol web_app
+        const res = await axios.post(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
             {
                 chat_id: TELEGRAM_CHAT_ID,
-                message_id: TELEGRAM_MESSAGE_ID,
                 text: text,
                 parse_mode: "MarkdownV2",
                 reply_markup: {
@@ -53,17 +52,17 @@ Klik tombol di bawah untuk membuka Live Dashboard, jadwal lengkap, top skor, dan
                 }
             }
         );
-        console.log("✅ SUCCESS: TELEGRAM RICH MESSAGE UPDATED");
+        // Cetak ID pesan baru yang sukses terkirim ke log konsol GitHub Actions
+        console.log("✅ BERHASIL KIRIM PESAN BARU!");
+        console.log("➡️ ID PESAN BARU ANDA ADALAH:", res.data.result.message_id);
+        console.log("Silakan salin ID tersebut ke variabel TELEGRAM_MESSAGE_ID di config atas, lalu kembalikan fungsi ke editMessageText.");
     } catch (e) {
-        const telegramError = e.response?.data?.description || "";
-        
-        if (telegramError.includes("message is not modified")) {
-            console.log("⚠️ INFO: Konten dashboard menu utama tidak berubah. Dilewati.");
-        } else {
-            console.log("❌ ERROR:", e.response?.data || e.message);
-            process.exit(1);
-        }
+        console.log("❌ ERROR:", e.response?.data || e.message);
+        process.exit(1);
     }
 }
+
+// Jalankan fungsi kirim baru ini sekali
+sendNewRichMessage();
 
 updateTelegramMessage();
