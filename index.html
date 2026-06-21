@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FIFA World Cup 2026 Dashboard</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #17212b;
+            --text-color: #f5f5f5;
+            --card-bg: #202b36;
+            --accent-color: #2b7bb9;
+            --border-color: #2f3e4e;
+            --success-color: #4caf50;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, var(--bg-color));
+            color: var(--tg-theme-text-color, var(--text-color));
+            margin: 0;
+            padding: 12px;
+            padding-bottom: 80px;
+        }
+
+        .header-title {
+            font-size: 15px;
+            font-weight: bold;
+            margin: 12px 0 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Desain Struktur Tabel Berbasis Web UI Gelap */
+        .table-container {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--tg-theme-secondary-bg-color, var(--card-bg));
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 10px;
+            font-size: 13.5px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: rgba(0, 0, 0, 0.2);
+            color: #8fa1b2;
+            font-weight: 600;
+        }
+
+        .text-center { text-align: center; }
+        
+        .status-badge {
+            color: var(--success-color);
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Desain Menu Dropdown / Accordion */
+        .accordion {
+            background-color: var(--tg-theme-secondary-bg-color, var(--card-bg));
+            color: var(--tg-theme-text-color, var(--text-color));
+            cursor: pointer;
+            padding: 12px;
+            width: 100%;
+            border: 1px solid var(--border-color);
+            text-align: left;
+            outline: none;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: 0.2s ease;
+        }
+
+        .panel {
+            padding: 0 2px;
+            display: none;
+            overflow: hidden;
+        }
+
+        /* Tombol Navigasi Menetap di Bawah Layar */
+        .bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--tg-theme-bg-color, var(--bg-color));
+            padding: 12px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+        }
+
+        .btn-action {
+            width: 100%;
+            max-width: 500px;
+            padding: 12px;
+            background-color: var(--tg-theme-button-color, var(--accent-color));
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-title">🏆 Pertandingan Hari Ini</div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 32%">Status / Jam (WIB)</th>
+                    <th style="width: 53%">Pertandingan</th>
+                    <th style="width: 15%" class="text-center">Grup</th>
+                </tr>
+            </thead>
+            <tbody id="live-matches">
+                <tr>
+                    <td><span class="status-badge">✅ FT</span></td>
+                    <td>🇳🇱 NED 5 - 1 SWE 🇸🇪</td>
+                    <td class="text-center">F</td>
+                </tr>
+                <tr>
+                    <td><span class="status-badge">✅ FT</span></td>
+                    <td>🇩🇪 GER 2 - 1 CIV 🇨🇮</td>
+                    <td class="text-center">E</td>
+                </tr>
+                <tr>
+                    <td><span class="status-badge">✅ FT</span></td>
+                    <td>🇪🇨 ECU 0 - 0 CUW 🇨🇼</td>
+                    <td class="text-center">E</td>
+                </tr>
+                <tr>
+                    <td>11:00</td>
+                    <td>🇹🇳 TUN vs 🇯🇵 JPN</td>
+                    <td class="text-center">F</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <button class="accordion" onclick="toggleAccordion(this)">
+        <span>📅 Jadwal Besok (Malam & Esok Pagi)</span>
+        <span>▼</span>
+    </button>
+    <div class="panel">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 32%">Waktu (WIB)</th>
+                        <th style="width: 53%">Pertandingan</th>
+                        <th style="width: 15%" class="text-center">Grup</th>
+                    </tr>
+                </thead>
+                <tbody id="tomorrow-matches">
+                    <tr>
+                        <td>23:00</td>
+                        <td>🇪🇸 ESP vs 🇸🇦 KSA</td>
+                        <td class="text-center">G</td>
+                    </tr>
+                    <tr>
+                        <td>02:00</td>
+                        <td>🇧🇪 BEL vs 🇮🇷 IRN</td>
+                        <td class="text-center">G</td>
+                    </tr>
+                    <tr>
+                        <td>05:00</td>
+                        <td>🇺🇾 URU vs 🇨🇻 CPV</td>
+                        <td class="text-center">H</td>
+                    </tr>
+                    <tr>
+                        <td>08:00</td>
+                        <td>🇳🇿 NZL vs 🇪🇬 EGY</td>
+                        <td class="text-center">H</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <button class="accordion" onclick="toggleAccordion(this)">
+        <span>🥇 Top Skor Sementara</span>
+        <span>▼</span>
+    </button>
+    <div class="panel">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 15%">Pos</th>
+                        <th style="width: 65%">Pemain / Negara</th>
+                        <th style="width: 20%" class="text-center">Gol</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>Cody Gakpo (🇳🇱 Belanda)</td>
+                        <td class="text-center">3</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>Jamal Musiala (🇩🇪 Jerman)</td>
+                        <td class="text-center">2</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <button class="accordion" onclick="toggleAccordion(this)">
+        <span> Birkenhead 📊 Klasemen Grup E & F</span>
+        <span>▼</span>
+    </button>
+    <div class="panel">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 10%">#</th>
+                        <th style="width: 60%">TEAM</th>
+                        <th style="width: 15%" class="text-center">P</th>
+                        <th style="width: 15%" class="text-center">PTS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>🇳🇱 Netherlands</td>
+                        <td class="text-center">3</td>
+                        <td class="text-center">7</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>🇸🇳 Senegal</td>
+                        <td class="text-center">3</td>
+                        <td class="text-center">6</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        <button class="btn-action" onclick="tutupDashboard()">TUTUP DASHBOARD</button>
+    </div>
+
+    <script>
+        // Inisialisasi API Telegram Mini App
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand(); // Layar otomatis terbuka penuh (full-height)
+
+        // Logika kontrol Buka/Tutup Accordion
+        function toggleAccordion(element) {
+            element.classList.toggle("active");
+            const panel = element.nextElementSibling;
+            const arrow = element.querySelector("span:last-child");
+            
+            if (panel.style.display === "block") {
+                panel.style.display = "none";
+                arrow.innerText = "▼";
+            } else {
+                panel.style.display = "block";
+                arrow.innerText = "▲";
+            }
+        }
+
+        function tutupDashboard() {
+            tg.close(); // Fungsi API 10.x menutup Mini App secara mulus
+        }
+    </script>
+</body>
+</html>
