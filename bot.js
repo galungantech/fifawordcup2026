@@ -1,181 +1,132 @@
 const axios = require("axios");
+const { renderHTMLTable } = require("./renderEngine");
 
 // ==========================
 // CONFIG
 // ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const MESSAGE_ID = 79; // WAJIB dari pesan pertama
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
-const headers = { "X-Auth-Token": FOOTBALL_DATA_TOKEN };
+const headers = {
+    "X-Auth-Token": FOOTBALL_DATA_TOKEN
+};
 
 // ==========================
-// FETCH SAFE
+// SAFE FETCH
 // ==========================
 async function get(url, label) {
     try {
         const res = await axios.get(url, { headers });
         return res.data;
     } catch (e) {
+        console.log("❌", label, e.response?.status || e.message);
         return null;
     }
 }
 
 // ==========================
-// FORMAT DATE
-// ==========================
-function nowWIB() {
-    return new Date().toLocaleDateString("id-ID", {
-        timeZone: "Asia/Jakarta",
-        weekday: "long",
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-    });
-}
-
-// ==========================
-// FORMAT MATCHES MONOSPACE
+// FORMAT MATCH (HTML VERSION)
 // ==========================
 function formatMatches(matches) {
-    return (matches || [])
-        .slice(0, 4)
-        .map(m => {
-            let status = m.status;
-            if (status === "FINISHED") status = "FT";
-            if (status === "IN_PLAY") status = "LIVE";
+    const rows = (matches || []).slice(0, 10).map(m => {
+        let status = m.status;
 
-            const home = m.homeTeam?.tla || m.homeTeam?.name?.slice(0,3).toUpperCase();
-            const away = m.awayTeam?.tla || m.awayTeam?.name?.slice(0,3).toUpperCase();
+        if (status === "FINISHED") status = "FT";
+        if (status === "IN_PLAY") status = "LIVE";
 
-            const hs = m.score?.fullTime?.home ?? "-";
-            const aS = m.score?.fullTime?.away ?? "-";
+        const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
 
-            const group = (m.group || "-").replace("GROUP_", "");
+        const match = `${m.homeTeam?.name} ${score} ${m.awayTeam?.name}`;
 
-            return `${status.padEnd(4)} | ${home} ${hs}-${aS} ${away} | GRP ${group}`;
-        })
-        .join("\n");
+        let group = m.group || "-";
+        group = group.replace("GROUP_", "");
+
+        return `<tr><td>${status}</td><td>${match}</td><td>${group}</td></tr>`;
+    }).join("\n");
+
+    return renderHTMLTable(`
+<tr><th>Status</th><th>Match</th><th>Grp</th></tr>
+${rows}
+`);
 }
 
 // ==========================
-// FORMAT SCHEDULE
+// FORMAT SCHEDULE (HTML VERSION)
 // ==========================
 function formatSchedule(matches) {
-    return (matches || [])
-        .slice(0, 4)
-        .map(m => {
-            const t = new Date(m.utcDate).toLocaleTimeString("id-ID", {
-                timeZone: "Asia/Jakarta",
-                hour: "2-digit",
-                minute: "2-digit"
-            });
+    const rows = (matches || []).slice(0, 10).map(m => {
+        const time = new Date(m.utcDate).toLocaleTimeString("id-ID", {
+            timeZone: "Asia/Jakarta",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
 
-            const home = m.homeTeam?.tla || "???";
-            const away = m.awayTeam?.tla || "???";
+        const match = `${m.homeTeam?.name} vs ${m.awayTeam?.name}`;
 
-            const group = (m.group || "-").replace("GROUP_", "");
+        return `<tr><td>${time}</td><td>${match}</td></tr>`;
+    }).join("\n");
 
-            return `${t} | ${home} vs ${away} | GRP ${group}`;
-        })
-        .join("\n");
+    return renderHTMLTable(`
+<tr><th>WIB</th><th>Match</th></tr>
+${rows}
+`);
 }
 
 // ==========================
-// STANDINGS (4 GROUP SAJA)
+// DASHBOARD
 // ==========================
-function formatStandings(standings) {
-    let out = [];
-    let count = 0;
+async function buildDashboard() {
+    let msg = "🏆 WORLD FOOTBALL DASHBOARD\n\n";
 
-    for (const g of standings || []) {
-        if (g.type !== "TOTAL") continue;
-        if (!g.group) continue;
-        if (count++ >= 4) break;
+    const matches = await get(
+        "https://api.football-data.org/v4/matches",
+        "matches"
+    );
 
-        const teams = g.table.slice(0, 4)
-            .map(t => `${t.team?.tla} ${t.points}`)
-            .join(" | ");
+    msg += "📌 MATCH RESULTS\n";
+    msg += formatMatches(matches?.matches || []);
 
-        out.push(`${g.group.replace("GROUP_", "")}: ${teams}`);
+    msg += "\n📅 UPCOMING MATCHES\n";
+    msg += formatSchedule(matches?.matches || []);
+
+    const ucl = await get(
+        "https://api.football-data.org/v4/competitions/CL/matches",
+        "ucl"
+    );
+
+    msg += "\n🏆 CHAMPIONS LEAGUE\n";
+    msg += formatSchedule(ucl?.matches || []);
+
+    if (msg.length > 3900) {
+        msg = msg.slice(0, 3900) + "\n...(cut)";
     }
 
-    return out.join("\n");
+    return msg;
 }
 
 // ==========================
-// LIVE BUTTONS
+// SEND TELEGRAM
 // ==========================
-function buildButtons(matches) {
-    const live = (matches || [])
-        .filter(m => ["IN_PLAY", "LIVE", "PAUSED"].includes(m.status))
-        .slice(0, 3);
+async function sendTelegram(text) {
+    // Escape karakter khusus MarkdownV2 untuk teks statis di luar HTML table agar tidak error
+    const escapedText = text
+        .replace(/-/g, "\\-")
+        .replace(/\./g, "\\.");
 
-    const buttons = [];
-
-    if (live.length) {
-        for (const m of live) {
-            buttons.push([{
-                text: `🔴 ${m.homeTeam?.tla} vs ${m.awayTeam?.tla}`,
-                url: "https://t.me/KotakBiasa?livestream"
-            }]);
-        }
-    }
-
-    buttons.push([
-        { text: "🏆 Klasemen FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings" }
-    ]);
-
-    buttons.push([
-        { text: "📰 Berita FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026" }
-    ]);
-
-    return buttons;
-}
-
-// ==========================
-// BUILD TEXT DASHBOARD
-// ==========================
-function buildText(matches, ucl, standings) {
-
-    return `
-🏆 WORLD FOOTBALL DASHBOARD
-📅 ${nowWIB()} (WIB)
-
-📌 MATCH RESULTS
-────────────────────
-${formatMatches(matches)}
-────────────────────
-
-📅 UPCOMING
-────────────────────
-${formatSchedule(matches)}
-────────────────────
-
-🏆 UCL
-────────────────────
-${formatSchedule(ucl)}
-────────────────────
-
-📊 KLASEMEN
-────────────────────
-${formatStandings(standings)}
-`;
-}
-
-// ==========================
-// EDIT MESSAGE
-// ==========================
-async function editMessage(text, buttons) {
     await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
         {
             chat_id: TELEGRAM_CHAT_ID,
-            message_id: MESSAGE_ID,
-            text,
-            parse_mode: "Markdown",
-            reply_markup: { inline_keyboard: buttons }
+            text: escapedText,
+            parse_mode: "MarkdownV2",
+            reply_markup: {
+                inline_keyboard: [
+                    [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/KotakBiasa?livestream"}],
+                    [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
+                    [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
+                ]
+            }
         }
     );
 }
@@ -184,17 +135,11 @@ async function editMessage(text, buttons) {
 // RUN
 // ==========================
 (async () => {
-    console.log("🚀 fetching...");
-
-    const matches = (await get("https://api.football-data.org/v4/matches"))?.matches;
-    const ucl = (await get("https://api.football-data.org/v4/competitions/CL/matches"))?.matches;
-    const standings = (await get("https://api.football-data.org/v4/competitions/WC/standings"))?.standings;
-
-    const text = buildText(matches, ucl, standings);
-    const buttons = buildButtons(matches);
-
-    console.log("✏️ editing...");
-    await editMessage(text, buttons);
-
-    console.log("✅ DONE");
+    try {
+        const dashboard = await buildDashboard();
+        await sendTelegram(dashboard);
+        console.log("✅ SENT WITH INLINE KEYBOARD");
+    } catch (e) {
+        console.log("❌ ERROR:", e.response?.data || e.message);
+    }
 })();
