@@ -49,21 +49,27 @@ function buildTable(headers, rows) {
 // ==========================
 function formatMatches(matches) {
     const rows = (matches || []).slice(0, 6).map(m => {
+
         let status = m.status;
 
         if (status === "FINISHED") status = "FT";
         if (status === "IN_PLAY") status = "LIVE";
 
-        const score = `${m.score?.fullTime?.home ?? "-"}-${m.score?.fullTime?.away ?? "-"}`;
+        const homeScore = m.score?.fullTime?.home ?? "-";
+        const awayScore = m.score?.fullTime?.away ?? "-";
 
-        const match = `${m.homeTeam?.name} ${score} vs ${m.awayTeam?.name}`;
+        const match =
+            `${m.homeTeam?.name} ${homeScore} vs ${awayScore} ${m.awayTeam?.name}`;
 
-        const group = (m.group || "-").replace("GROUP_", "");
+        const group = (m.group || "-").replace(/^GROUP_/, "");
 
         return [status, match, group];
     });
 
-    return buildTable(["STATUS", "MATCH", "GROUP"], rows);
+    return buildTable(
+        ["STATUS", "MATCH", "GROUP"],
+        rows
+    );
 }
 
 // ==========================
