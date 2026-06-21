@@ -48,7 +48,7 @@ function buildTable(headers, rows) {
 // MATCHES
 // ==========================
 function formatMatches(matches) {
-    const rows = (matches || []).slice(0, 6).map(m => {
+    const rows = (matches || []).slice(0, 4).map(m => {
 
         let status = m.status;
         if (status === "FINISHED") status = "FT";
@@ -74,7 +74,7 @@ function formatMatches(matches) {
 // SCHEDULE
 // ==========================
 function formatSchedule(matches) {
-    const rows = (matches || []).slice(0, 6).map(m => {
+    const rows = (matches || []).slice(0, 4).map(m => {
 
         const d = new Date(m.utcDate);
 
@@ -114,15 +114,20 @@ function formatStandings(standings) {
     if (!standings.length) return "<p>Standings belum tersedia</p>";
 
     let html = "";
+    let count = 0;
 
     standings.forEach(group => {
 
         if (group.type !== "TOTAL") return;
         if (!group.group) return;
 
+        // 🔥 LIMIT 4 GROUP SAJA
+        if (count >= 4) return;
+        count++;
+
         const groupName = group.group.replace(/^GROUP_/, "");
 
-        const rows = (group.table || []).map(t => [
+        const rows = (group.table || []).slice(0, 4).map(t => [
             t.position,
             t.team?.name,
             t.playedGames,
@@ -154,7 +159,7 @@ function buildLiveButtons(matches) {
         live.forEach(m => {
             buttons.push([{
                 text: `🔴 LIVE: ${m.homeTeam?.name} vs ${m.awayTeam?.name}`,
-                url: "https://t.me/KotakBiasa?livestream"
+                url: "https://t.me/+JvcxUG8-HLgwM2Zl"
             }]);
         });
     }
@@ -162,7 +167,7 @@ function buildLiveButtons(matches) {
     buttons.push([
         {
             text: "📺 Tonton Live Streaming",
-            url: "https://t.me/KotakBiasa?livestream"
+            url: "https://t.me/+JvcxUG8-HLgwM2Zl"
         }
     ]);
 
