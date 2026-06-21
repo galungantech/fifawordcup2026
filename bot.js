@@ -7,6 +7,7 @@ const { renderHTMLTable } = require("./renderEngine");
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
+const MESSAGE_ID = 83; // ID pesan pertama
 
 const headers = {
     "X-Auth-Token": FOOTBALL_DATA_TOKEN
@@ -166,23 +167,24 @@ async function buildDashboard() {
 // SEND TELEGRAM
 // ==========================
 async function sendTelegram(text) {
-    // Escape karakter khusus MarkdownV2 untuk teks statis di luar tabel agar tidak memicu error parsing
+
     const escapedText = text
         .replace(/-/g, "\\-")
         .replace(/\./g, "\\.")
         .replace(/\!/g, "\\!");
 
     await axios.post(
-        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+        `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
         {
             chat_id: TELEGRAM_CHAT_ID,
+            message_id: MESSAGE_ID,
             text: escapedText,
             parse_mode: "MarkdownV2",
             reply_markup: {
                 inline_keyboard: [
-                    [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/KotakBiasa?livestream"}],
-                    [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
-                    [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
+                    [{ text: "🔴 Tonton Live Streaming", url: "https://t.me/KotakBiasa?livestream" }],
+                    [{ text: "🏆 Klasemen Lengkap FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings" }],
+                    [{ text: "📰 Berita Terbaru FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026" }]
                 ]
             }
         }
