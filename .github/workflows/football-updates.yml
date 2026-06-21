@@ -2,7 +2,18 @@ name: Send Football Dashboard to Telegram
 
 on:
   schedule:
-    - cron: '0 23,11 * * *'
+    # --- JADWAL PERTANDINGAN JAM 23.45 WIB ---
+    # 23.45 WIB (16.45 UTC) -> Saat pertandingan dimulai
+    - cron: '45 16 16,17 Sep *'
+    # 01.55 WIB Hari Berikutnya (18.55 UTC) -> 10 menit setelah laga usai
+    - cron: '55 18 16,17 Sep *'
+
+    # --- JADWAL PERTANDINGAN JAM 02.00 WIB ---
+    # 02.00 WIB (19.00 UTC) -> Saat pertandingan dimulai
+    - cron: '0 19 17,18 Sep *'
+    # 04.10 WIB (21.10 UTC) -> 10 menit setelah laga usai
+    - cron: '10 21 17,18 Sep *'
+
   workflow_dispatch:
 
 jobs:
@@ -16,10 +27,11 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        # Menggunakan Node 24 untuk menghindari log deprecation versi 20
+        node-version: '24'
 
     - name: Install Dependencies
-      run: npm install axios puppeteer form-data
+      run: npm install axios
 
     - name: Execute Bot Script
       env:
