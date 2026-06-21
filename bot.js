@@ -6,7 +6,7 @@ const axios = require("axios");
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 // Ganti angka 74 dengan ID pesan asli yang ingin di-update di room chat Anda
-const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 74; 
+const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 83; 
 
 // 🔥 Masukkan URL hasil link GitHub Pages Anda di sini
 const WEB_APP_URL = "https://galungantech.github.io/fifawordcup2026/"; 
