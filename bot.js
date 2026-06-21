@@ -1,16 +1,11 @@
 const axios = require("axios");
 
-// ==========================
-// CONFIG
-// ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const MESSAGE_ID = 78;
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
-const headers = {
-    "X-Auth-Token": FOOTBALL_DATA_TOKEN
-};
+const headers = { "X-Auth-Token": FOOTBALL_DATA_TOKEN };
 
 // ==========================
 // FETCH
@@ -26,22 +21,21 @@ async function get(url, label) {
 }
 
 // ==========================
-// FORMAT MATCHES
+// FORMAT MATCH
 // ==========================
 function formatMatches(matches) {
     return (matches || []).slice(0, 4).map(m => {
-
         let status = m.status;
         if (status === "FINISHED") status = "FT";
         if (status === "IN_PLAY") status = "LIVE";
 
-        const home = m.homeTeam?.name || "-";
-        const away = m.awayTeam?.name || "-";
+        const h = m.homeTeam?.name || "-";
+        const a = m.awayTeam?.name || "-";
 
         const hs = m.score?.fullTime?.home ?? "-";
         const as = m.score?.fullTime?.away ?? "-";
 
-        return `${status.padEnd(5)} ${home} ${hs}-${as} ${away}`;
+        return `${status.padEnd(5)} ${h.padEnd(10)} ${hs}-${as} ${a}`;
     }).join("\n");
 }
 
@@ -70,7 +64,7 @@ function formatSchedule(matches) {
 }
 
 // ==========================
-// STANDINGS SIMPLE
+// STANDINGS
 // ==========================
 function formatStandings(standings) {
 
@@ -83,49 +77,41 @@ function formatStandings(standings) {
         if (g.type !== "TOTAL" || !g.group) continue;
         if (count++ >= 2) break;
 
-        out += `\nGROUP ${g.group.replace("GROUP_", "")}\n`;
+        out += `GROUP ${g.group.replace("GROUP_", "")}\n`;
 
         out += (g.table || []).slice(0, 4).map(t =>
-            `${t.position}. ${t.team?.name} P${t.playedGames} P${t.points}`
-        ).join("\n") + "\n";
+            `${t.position}. ${t.team?.name.padEnd(10)} P${t.playedGames} P${t.points}`
+        ).join("\n");
+
+        out += "\n\n";
     }
 
-    return out;
+    return out.trim();
 }
 
 // ==========================
-// BUILD MESSAGE
+// BUILD MESSAGE (MULTI BLOCK)
 // ==========================
-async function buildMessage() {
+async function buildSections() {
 
     const matches = await get("https://api.football-data.org/v4/matches", "matches");
     const ucl = await get("https://api.football-data.org/v4/competitions/CL/matches", "ucl");
     const standings = await get("https://api.football-data.org/v4/competitions/WC/standings", "standings");
 
-    return `
-🏆 WORLD FOOTBALL DASHBOARD
-
-📌 MATCH RESULTS
-────────────────────
-${formatMatches(matches?.matches)}
-
-📅 UPCOMING
-────────────────────
-${formatSchedule(matches?.matches)}
-
-🏆 UCL
-────────────────────
-${formatSchedule(ucl?.matches)}
-
-📊 STANDINGS
-────────────────────
-${formatStandings(standings?.standings)}
-
-`;
+    return {
+        matches: formatMatches(matches?.matches),
+        schedule: formatSchedule(matches?.matches),
+        ucl: formatSchedule(ucl?.matches),
+        standings: formatStandings(standings?.standings),
+        live: (matches?.matches || [])
+            .filter(m => ["IN_PLAY", "LIVE"].includes(m.status))
+            .map(m => `${m.homeTeam?.name} vs ${m.awayTeam?.name}`)
+            .join("\n")
+    };
 }
 
 // ==========================
-// LIVE BUTTONS
+// BUTTONS
 // ==========================
 function buildButtons(matches) {
 
@@ -133,41 +119,57 @@ function buildButtons(matches) {
         ["IN_PLAY", "LIVE", "PAUSED"].includes(m.status)
     ).slice(0, 3);
 
-    const buttons = [];
+    const btn = [];
 
     live.forEach(m => {
-        buttons.push([{
+        btn.push([{
             text: `🔴 LIVE: ${m.homeTeam?.name} vs ${m.awayTeam?.name}`,
             url: "https://t.me/KotakBiasa?livestream"
         }]);
     });
 
-    buttons.push([
-        { text: "📺 Tonton Live Streaming", url: "https://t.me/KotakBiasa?livestream" }
+    btn.push([
+        { text: "📺 Streaming", url: "https://t.me/KotakBiasa?livestream" }
     ]);
 
-    buttons.push([
+    btn.push([
         { text: "🏆 Klasemen FIFA", url: "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings" }
     ]);
 
-    return buttons;
+    return btn;
 }
 
 // ==========================
-// SEND EDIT MESSAGE TEXT
+// SEND MESSAGE
 // ==========================
-async function editMessage(text, buttons) {
+async function send(text, buttons) {
 
     await axios.post(
         `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
         {
             chat_id: TELEGRAM_CHAT_ID,
             message_id: MESSAGE_ID,
-            text: `<pre>${text}</pre>`,
             parse_mode: "HTML",
-            reply_markup: {
-                inline_keyboard: buttons
-            }
+            reply_markup: { inline_keyboard: buttons },
+
+            text: `
+🏆 <b>WORLD FOOTBALL DASHBOARD</b>
+
+📌 MATCH RESULTS
+<pre>${text.matches}</pre>
+
+📅 UPCOMING MATCHES
+<pre>${text.schedule}</pre>
+
+🏆 UCL MATCHES
+<pre>${text.ucl}</pre>
+
+📊 STANDINGS
+<pre>${text.standings}</pre>
+
+🔴 LIVE NOW
+<pre>${text.live || "-"}</pre>
+`
         }
     );
 }
@@ -177,18 +179,17 @@ async function editMessage(text, buttons) {
 // ==========================
 (async () => {
     try {
-
         console.log("🚀 Fetch data...");
 
         const matches = await get("https://api.football-data.org/v4/matches", "matches");
 
-        const text = await buildMessage();
+        const data = await buildSections();
         const buttons = buildButtons(matches?.matches);
 
         console.log("✏️ Updating message...");
-        await editMessage(text, buttons);
+        await send(data, buttons);
 
-        console.log("✅ DONE (TEXT MODE MONOSPACE)");
+        console.log("✅ DONE (MULTI MONOSPACE BLOCK)");
     } catch (e) {
         console.log("❌ ERROR:", e.response?.data || e.message);
     }
