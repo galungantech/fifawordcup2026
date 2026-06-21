@@ -7,7 +7,7 @@ const { renderHTMLTable } = require("./renderEngine");
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 // 🔥 MASUKKAN ID PESAN YANG INGIN DI-EDIT DI SINI
-const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 74; 
+const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 83; 
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
 const headers = {
