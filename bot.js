@@ -182,7 +182,7 @@ async function updateTelegramMessage(text) {
             parse_mode: "MarkdownV2",
             reply_markup: {
                 inline_keyboard: [
-                    [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/+JvcxUG8-HLgwM2Zl"}],
+                    [{"text": "🔴 Tonton Live Streaming", "url": "https://t.me/JvcxUG8HLgwM2Zl?livestream"}],
                     [{"text": "🏆 Klasemen Lengkap FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026/standings"}],
                     [{"text": "📰 Berita Terbaru FIFA", "url": "https://www.fifa.com/en/tournaments/mens/worldcup/2026"}]
                 ]
