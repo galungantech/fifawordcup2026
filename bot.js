@@ -194,12 +194,25 @@ async function updateTelegramMessage(text) {
 // ==========================
 // RUN
 // ==========================
+// ==========================
+// RUN
+// ==========================
 (async () => {
     try {
         const dashboard = await buildDashboard();
         await updateTelegramMessage(dashboard);
         console.log("✅ MESSAGE UPDATED SUCCESSFULLY");
     } catch (e) {
-        console.log("❌ ERROR:", e.response?.data || e.message);
+        // Ambil pesan error dari response Telegram jika ada
+        const telegramError = e.response?.data?.description || "";
+        
+        // Cek jika errornya hanya karena kontennya sama (bukan error script rusak)
+        if (telegramError.includes("message is not modified")) {
+            console.log("⚠️ INFO: Konten dashboard belum ada perubahan. Dilewati agar tidak error.");
+        } else {
+            // Jika error disebabkan hal lain (Token salah, API down, dll), tetap tampilkan error asli
+            console.log("❌ ERROR:", e.response?.data || e.message);
+            process.exit(1); // Tetap gagalkan workflow jika errornya fatal
+        }
     }
 })();
