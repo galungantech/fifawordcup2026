@@ -14,10 +14,14 @@ const WEB_APP_URL = "https://galungantech.github.io/fifawordcup2026/";
 // ==========================
 // EDIT TELEGRAM RICH MESSAGE
 // ==========================
+// ==========================
+// EDIT TELEGRAM RICH MESSAGE
+// ==========================
 async function updateTelegramMessage() {
+    // 🔥 Semua karakter khusus (!, -, .) sudah di-escape dengan \\
     const text = `🏆 *FIFA World Cup 2026™*
 
-_Piala Dunia 2026 kini telah memasuki fase grup! Jangan lewatkan aksi serunya\\._ \\- *Kotak Biasa*
+_Piala Dunia 2026 kini telah memasuki fase grup\\! Jangan lewatkan aksi serunya\\._ \\- *Kotak Biasa*
 
 Klik tombol di bawah untuk membuka Live Dashboard, jadwal lengkap, top skor, dan klasemen interaktif langsung di dalam Telegram\\.`;
 
@@ -53,7 +57,6 @@ Klik tombol di bawah untuk membuka Live Dashboard, jadwal lengkap, top skor, dan
     } catch (e) {
         const telegramError = e.response?.data?.description || "";
         
-        // Pencegahan crash di GitHub Actions jika konten teks persis sama
         if (telegramError.includes("message is not modified")) {
             console.log("⚠️ INFO: Konten dashboard menu utama tidak berubah. Dilewati.");
         } else {
