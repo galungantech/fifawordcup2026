@@ -19,7 +19,7 @@ jobs:
         node-version: '20'
 
     - name: Install Dependencies
-      run: run: npm install axios puppeteer form-data
+      run: npm install axios puppeteer form-data
 
     - name: Execute Bot Script
       env:
