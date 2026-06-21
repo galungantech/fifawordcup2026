@@ -5,15 +5,10 @@ const axios = require("axios");
 // ==========================
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-// Ganti angka 74 dengan ID pesan asli yang ingin di-update di room chat Anda
-const TELEGRAM_MESSAGE_ID = process.env.TELEGRAM_MESSAGE_ID || 83; 
 
-// 🔥 Masukkan URL hasil link GitHub Pages Anda di sini
+// 🔥 Ganti dengan URL GitHub Pages Anda sendiri
 const WEB_APP_URL = "https://galungantech.github.io/fifawordcup2026/"; 
 
-// ==========================
-// EDIT TELEGRAM RICH MESSAGE
-// ==========================
 // ==========================
 // KODE COBA KIRIM BARU (RUN ONCE TO GET ID)
 // ==========================
@@ -25,7 +20,6 @@ _Piala Dunia 2026 kini telah memasuki fase grup\\! Jangan lewatkan aksi serunya\
 Klik tombol di bawah untuk membuka Live Dashboard, jadwal lengkap, top skor, dan klasemen interaktif langsung di dalam Telegram\\.`;
 
     try {
-        // 🔥 Menggunakan sendMessage terlebih dahulu untuk mendaftarkan struktur tipe tombol web_app
         const res = await axios.post(
             `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
             {
@@ -52,17 +46,13 @@ Klik tombol di bawah untuk membuka Live Dashboard, jadwal lengkap, top skor, dan
                 }
             }
         );
-        // Cetak ID pesan baru yang sukses terkirim ke log konsol GitHub Actions
         console.log("✅ BERHASIL KIRIM PESAN BARU!");
         console.log("➡️ ID PESAN BARU ANDA ADALAH:", res.data.result.message_id);
-        console.log("Silakan salin ID tersebut ke variabel TELEGRAM_MESSAGE_ID di config atas, lalu kembalikan fungsi ke editMessageText.");
     } catch (e) {
         console.log("❌ ERROR:", e.response?.data || e.message);
         process.exit(1);
     }
 }
 
-// Jalankan fungsi kirim baru ini sekali
+// 🔥 Memanggil fungsi yang benar agar tidak memicu ReferenceError
 sendNewRichMessage();
-
-updateTelegramMessage();
